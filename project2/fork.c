@@ -12,6 +12,14 @@
  * management can be a bitch. See 'mm/memory.c': 'copy_page_range()'
  */
 
+/*
+ * fork（进程复制）是一种创建自身进程副本的操作，是Linux创建进程的主要方法。
+ * fork 操作会为子进程创建一个单独的地址空间，子进程拥有父进程内存段的精确副本。
+ * fork之后，两个进程还运行着相同的程序。
+ * fork相关代码最终的执行代码为_do_fork()。
+ * fork,vfork,clone的主要逻辑都是_do_fork()(ref: 搜索"SYSCALL_DEFINE0(fork)")
+ */
+
 #include <linux/anon_inodes.h>
 #include <linux/slab.h>
 #include <linux/sched/autogroup.h>
@@ -878,6 +886,7 @@ static struct task_struct *dup_task_struct(struct task_struct *orig, int node)
 
 	stack_vm_area = task_stack_vm_area(tsk);
 
+    // 指向同一块内存，难道是写时复制？
 	err = arch_dup_task_struct(tsk, orig);
 
 	/*
@@ -1834,6 +1843,7 @@ static __latent_entropy struct task_struct *copy_process(
 	u64 clone_flags = args->flags;
 	struct nsproxy *nsp = current->nsproxy;
 
+    // 检查clone_args
 	/*
 	 * Don't allow sharing the root directory with processes in a different
 	 * namespace
@@ -1897,7 +1907,9 @@ static __latent_entropy struct task_struct *copy_process(
 		if (clone_flags & (CLONE_DETACHED | CLONE_THREAD))
 			return ERR_PTR(-EINVAL);
 	}
+    // 检查完clone_args
 
+    // 处理之前到达的中断，把fork过程中产生的中断delay
 	/*
 	 * Force any signals received before this point to be delivered
 	 * before the fork happens.  Collect up signals sent to multiple
@@ -1917,6 +1929,7 @@ static __latent_entropy struct task_struct *copy_process(
 		goto fork_out;
 
 	retval = -ENOMEM;
+    // 新进程创建新的内核堆栈，thread_info和task_struct结构
 	p = dup_task_struct(current, node);
 	if (!p)
 		goto fork_out;
@@ -1933,8 +1946,10 @@ static __latent_entropy struct task_struct *copy_process(
 	 */
 	p->clear_child_tid = (clone_flags & CLONE_CHILD_CLEARTID) ? args->child_tid : NULL;
 
+    // 初始化ftrace，内核追踪函数调用
 	ftrace_graph_init_task(p);
 
+    // 初始化锁
 	rt_mutex_init_task(p);
 
 #ifdef CONFIG_PROVE_LOCKING
@@ -1950,6 +1965,7 @@ static __latent_entropy struct task_struct *copy_process(
 	}
 	current->flags &= ~PF_NPROC_EXCEEDED;
 
+    // 拷贝父进程的信号
 	retval = copy_creds(p, clone_flags);
 	if (retval < 0)
 		goto bad_fork_free;
@@ -1960,6 +1976,7 @@ static __latent_entropy struct task_struct *copy_process(
 	 * to stop root fork bombs.
 	 */
 	retval = -EAGAIN;
+    // 检查当前用户的最大线程数是否大于max_thread
 	if (nr_threads >= max_threads)
 		goto bad_fork_cleanup_count;
 
@@ -1972,6 +1989,7 @@ static __latent_entropy struct task_struct *copy_process(
 	p->vfork_done = NULL;
 	spin_lock_init(&p->alloc_lock);
 
+    // 清除挂起的信号
 	init_sigpending(&p->pending);
 
 	p->utime = p->stime = p->gtime = 0;
@@ -2047,6 +2065,7 @@ static __latent_entropy struct task_struct *copy_process(
 	p->sequential_io_avg	= 0;
 #endif
 
+    // 分割父子进程剩余时间片，将子进程设为TASK_RUNNING
 	/* Perform scheduler related setup. Assign this task to a CPU. */
 	retval = sched_fork(clone_flags, p);
 	if (retval)
@@ -2058,6 +2077,8 @@ static __latent_entropy struct task_struct *copy_process(
 	retval = audit_alloc(p);
 	if (retval)
 		goto bad_fork_cleanup_perf;
+    
+    // 接下来拷贝所有的进程信息（files、fs、sighand、signal、mm、namespaces、io、thread_tls）
 	/* copy all the process information */
 	shm_init_task(p);
 	retval = security_task_alloc(p, clone_flags);
@@ -2405,6 +2426,7 @@ long _do_fork(struct kernel_clone_args *args)
 	u64 clone_flags = args->flags;
 	struct completion vfork;
 	struct pid *pid;
+    // 子进程进程描述符 p
 	struct task_struct *p;
 	int trace = 0;
 	long nr;
@@ -2414,6 +2436,8 @@ long _do_fork(struct kernel_clone_args *args)
 	 * called from kernel_thread or CLONE_UNTRACED is explicitly
 	 * requested, no event is reported; otherwise, report if the event
 	 * for the type of forking is enabled.
+     *p
+     * 判断是不是被调试程序trace，若被traced：
 	 */
 	if (!(clone_flags & CLONE_UNTRACED)) {
 		if (clone_flags & CLONE_VFORK)
@@ -2423,11 +2447,21 @@ long _do_fork(struct kernel_clone_args *args)
 		else
 			trace = PTRACE_EVENT_FORK;
 
+        // 有关likely和Unlikely，实际上是利用gcc内置函数对分支条件的优化，likely表示大多数情况下分支会被执行
 		if (likely(!ptrace_event_enabled(current, trace)))
 			trace = 0;
 	}
 
+    /*
+     * 设置子进程进程描述符和其他内核数据结构，拷贝寄存器和进程环境
+     * static __latent_entropy struct task_struct *copy_process(
+     * struct pid *pid, // 子进程PID
+     * int trace,
+     * int node,
+     * struct kernel_clone_args *args)
+     */
 	p = copy_process(NULL, trace, NUMA_NO_NODE, args);
+    
 	add_latent_entropy();
 
 	if (IS_ERR(p))
@@ -2517,6 +2551,9 @@ pid_t kernel_thread(int (*fn)(void *), void *arg, unsigned long flags)
 	return _do_fork(&args);
 }
 
+/*
+ * 这里可以看到fork,vfork,clone的主要逻辑都是_do_fork()
+ */
 #ifdef __ARCH_WANT_SYS_FORK
 SYSCALL_DEFINE0(fork)
 {
