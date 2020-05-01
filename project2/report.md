@@ -269,7 +269,7 @@ ONE("ctx", S_IRUGO, proc_pid_ctx)
 static int proc_pid_ctx(struct seq_file *m, struct pid_namespace *ns, struct pid *pid, struct task_struct *task）{
         seq_printf(m, "%d\n", task->ctx);
         return 0;
-}                       
+}
 ```
 
 #### 修改内容
