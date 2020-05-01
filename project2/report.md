@@ -21,7 +21,7 @@
 
 ```sched.h```中定义了```struct task_struct```:
 
-```c++
+```c
 struct task_struct {
 #ifdef CONFIG_THREAD_INFO_IN_TASK
         struct thread_info              thread_info;
@@ -39,7 +39,7 @@ struct task_struct {
 ```
 根据注释，```thread_info```必须在```task_struct```开头，```thread```必须在```task_struct```的结尾。 ```randomized_struct_fields_start```标志着```task_struct```随机化部分的开始，我们可以在这之后添加数据成员。
 
-```c++
+```c
         randomized_struct_fields_start
         void                            *stack;
         refcount_t                      usage;
@@ -53,7 +53,7 @@ struct task_struct {
 
 我们知道创建子进程最主要的方法就是fork，在```fork.c```中找到fork系统调用的定义:
 
-```c++
+```c
 #ifdef __ARCH_WANT_SYS_FORK
 SYSCALL_DEFINE0(fork)
 {
@@ -71,7 +71,7 @@ SYSCALL_DEFINE0(fork)
 ```
 我们看到fork的主要逻辑在```_do_fork(&args)```中，同样的```vfork,clone,kernel_thread```等创建进程的系统调用也都使用了这个函数。
 
-```c++
+```c
 long _do_fork(struct kernel_clone_args *args)
 {
         u64 clone_flags = args->flags;
@@ -125,12 +125,12 @@ long _do_fork(struct kernel_clone_args *args)
 ```
 其中创建新进程（旧进程的拷贝）的操作是在```p = copy_process(NULL, trace, NUMA_NO_NODE, args);```中完成的，返回新进程的```task_struct```：
 
-```c++
+```c
 static __latent_entropy struct task_struct *copy_process(struct pid *pid, int trace, int node, struct kernel_clone_args *args)；
 ```
 其中```p = dup_task_struct(current, node);```创建了新进程的进程描述符，我们可以在这之后初始化```p->ctx=0;```
 
-```c++
+```c
 p = dup_task_struct(current, node);
         if (!p)
                 goto fork_out;
@@ -142,7 +142,7 @@ p = dup_task_struct(current, node);
 
 我们可以通过```schedule()```选择运行的进程。
 
-```c++
+```c
 asmlinkage __visible void __sched schedule(void)
 {
         struct task_struct *tsk = current;
@@ -160,7 +160,7 @@ EXPORT_SYMBOL(schedule);
 
 其中最重要的逻辑是在```__schedule(bool)```中实现的：
 
-```c++
+```c
 static void __sched notrace __schedule(bool preempt)
 {
         struct task_struct *prev, *next;
@@ -221,7 +221,7 @@ static void __sched notrace __schedule(bool preempt)
 
 ```base.c```中定义了```/proc/xxx```下的文件/目录:
 
-```c++
+```c
 static const struct pid_entry tgid_base_stuff[] = {
 	DIR("task",       S_IRUGO|S_IXUGO, proc_task_inode_operations, proc_task_operations),
 	DIR("fd",         S_IRUSR|S_IXUSR, proc_fd_inode_operations, proc_fd_operations),
@@ -240,7 +240,7 @@ static const struct pid_entry tgid_base_stuff[] = {
 ```
 其中```DIR,REG,ONE```都是由宏```NOD```定义，```NOD```的定义如下：
 
-```c++
+```c
 #define NOD(NAME, MODE, IOP, FOP, OP) {		\
 	.name = (NAME),				\
 	.len  = sizeof(NAME) - 1,		\
@@ -253,19 +253,19 @@ static const struct pid_entry tgid_base_stuff[] = {
 
 我们若实现一个只读的```ctx```文件，可以使用```ONE```宏:
 
-```c++
+```c
 #define ONE(NAME, MODE, show)			\
 	NOD(NAME, (S_IFREG|(MODE)),		\
 	NULL, &proc_single_file_operations,     \
 	{ .proc_show = show } )
 ```
 
-```c++
+```c
 ONE("ctx", S_IRUGO, proc_pid_ctx)
 ```
 其中```proc_pid_ctx```的实现使用```<linux/seq_file.h>```：
 
-```c++
+```c
 static int proc_pid_ctx(struct seq_file *m, struct pid_namespace *ns, struct pid *pid, struct task_struct *task）{
         seq_printf(m, "%d\n", task->ctx);
         return 0;
