@@ -552,32 +552,27 @@ void resched_cpu(int cpu)
  */
 int get_nohz_timer_target(void)
 {
-	int i, cpu = smp_processor_id(), default_cpu = -1;
+	int i, cpu = smp_processor_id();
 	struct sched_domain *sd;
 
-	if (housekeeping_cpu(cpu, HK_FLAG_TIMER)) {
-		if (!idle_cpu(cpu))
-			return cpu;
-		default_cpu = cpu;
-	}
+	if (!idle_cpu(cpu) && housekeeping_cpu(cpu, HK_FLAG_TIMER))
+		return cpu;
 
 	rcu_read_lock();
 	for_each_domain(cpu, sd) {
-		for_each_cpu_and(i, sched_domain_span(sd),
-			housekeeping_cpumask(HK_FLAG_TIMER)) {
+		for_each_cpu(i, sched_domain_span(sd)) {
 			if (cpu == i)
 				continue;
 
-			if (!idle_cpu(i)) {
+			if (!idle_cpu(i) && housekeeping_cpu(i, HK_FLAG_TIMER)) {
 				cpu = i;
 				goto unlock;
 			}
 		}
 	}
 
-	if (default_cpu == -1)
-		default_cpu = housekeeping_any_cpu(HK_FLAG_TIMER);
-	cpu = default_cpu;
+	if (!housekeeping_cpu(cpu, HK_FLAG_TIMER))
+		cpu = housekeeping_any_cpu(HK_FLAG_TIMER);
 unlock:
 	rcu_read_unlock();
 	return cpu;
@@ -924,17 +919,17 @@ uclamp_eff_get(struct task_struct *p, enum uclamp_id clamp_id)
 	return uc_req;
 }
 
-unsigned long uclamp_eff_value(struct task_struct *p, enum uclamp_id clamp_id)
+unsigned int uclamp_eff_value(struct task_struct *p, enum uclamp_id clamp_id)
 {
 	struct uclamp_se uc_eff;
 
 	/* Task currently refcounted: use back-annotated (effective) value */
 	if (p->uclamp[clamp_id].active)
-		return (unsigned long)p->uclamp[clamp_id].value;
+		return p->uclamp[clamp_id].value;
 
 	uc_eff = uclamp_eff_get(p, clamp_id);
 
-	return (unsigned long)uc_eff.value;
+	return uc_eff.value;
 }
 
 /*
@@ -1446,6 +1441,17 @@ void check_preempt_curr(struct rq *rq, struct task_struct *p, int flags)
 }
 
 #ifdef CONFIG_SMP
+
+static inline bool is_per_cpu_kthread(struct task_struct *p)
+{
+	if (!(p->flags & PF_KTHREAD))
+		return false;
+
+	if (p->nr_cpus_allowed != 1)
+		return false;
+
+	return true;
+}
 
 /*
  * Per-CPU kthreads are allowed to run on !active && online CPUs, see
@@ -4058,6 +4064,10 @@ static void __sched notrace __schedule(bool preempt)
 		 * changes to task_struct made by pick_next_task().
 		 */
 		RCU_INIT_POINTER(rq->curr, next);
+		
+		/* Increase the schedule counter */
+		rq->curr->ctx++;
+
 		/*
 		 * The membarrier system call requires each architecture
 		 * to have a full memory barrier after updating
@@ -4503,7 +4513,7 @@ static inline int rt_effective_prio(struct task_struct *p, int prio)
 void set_user_nice(struct task_struct *p, long nice)
 {
 	bool queued, running;
-	int old_prio;
+	int old_prio, delta;
 	struct rq_flags rf;
 	struct rq *rq;
 
@@ -4537,18 +4547,19 @@ void set_user_nice(struct task_struct *p, long nice)
 	set_load_weight(p, true);
 	old_prio = p->prio;
 	p->prio = effective_prio(p);
+	delta = p->prio - old_prio;
 
-	if (queued)
+	if (queued) {
 		enqueue_task(rq, p, ENQUEUE_RESTORE | ENQUEUE_NOCLOCK);
+		/*
+		 * If the task increased its priority or is running and
+		 * lowered its priority, then reschedule its CPU:
+		 */
+		if (delta < 0 || (delta > 0 && task_running(rq, p)))
+			resched_curr(rq);
+	}
 	if (running)
 		set_next_task(rq, p);
-
-	/*
-	 * If the task increased its priority or is running and
-	 * lowered its priority, then reschedule its CPU:
-	 */
-	p->sched_class->prio_changed(rq, p, old_prio);
-
 out_unlock:
 	task_rq_unlock(rq, p, &rf);
 }
