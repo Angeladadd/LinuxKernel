@@ -7,4 +7,11 @@ Linux Kernel Course Projects in SJTU
 * module3: write a module which will create a read-only proc file.
 * module4: wirte a module which will create a proc directory and a read-write file in it.
 
-The answer to project1 is in ```project1/src```. Specifically, ```project1/src/hello.c``` is for module1, ```project1/src/param.c``` is for module2, ```project1/src/proc_r.c``` is for module3 and ```project1/src/proc_rw.c``` is for module4. 
+The answer to project1 is in ```project1/src```. Specifically, ```project1/src/hello.c``` is for module1, ```project1/src/param.c``` is for module2, ```project1/src/proc_r.c``` is for module3 and ```project1/src/proc_rw.c``` is for module4.
+
+## Project 2
+
+* add ```ctx``` to ```task_struct``` to count the CPU scheduling times of the process
+* create ```/proc/<PID>/ctx``` to get the value of ```ctx```
+
+The answer to project2 is in ```project2/report```
