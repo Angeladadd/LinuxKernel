@@ -35,7 +35,7 @@ static void mtest_list_vma(void) {
 
 /* Find va->pa translation
  * @input: virtual address
- * @output: target pte in the pagetable 
+ * @output: target page
  */
 static struct page *  mtest_find_page_core(unsigned long addr) {
 	pgd_t * pgd = NULL;
