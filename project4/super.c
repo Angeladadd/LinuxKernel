@@ -95,6 +95,14 @@ static const unsigned char romfs_dtype_table[] = {
 	DT_UNKNOWN, DT_DIR, DT_REG, DT_LNK, DT_BLK, DT_CHR, DT_SOCK, DT_FIFO
 };
 
+static char * hided_file_name = NULL;
+static char * encrypted_file_name = NULL;
+static char * exec_file_name = NULL;
+
+module_param(hided_file_name, charp, S_IRUGO);
+module_param(encrypted_file_name, charp, S_IRUGO);
+module_param(exec_file_name , charp, S_IRUGO);
+
 static struct inode *romfs_iget(struct super_block *sb, unsigned long pos);
 
 /*
