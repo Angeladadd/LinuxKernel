@@ -32,7 +32,33 @@ SYSCALL_DEFINE5(select, int, n, fd_set __user *, inp, fd_set __user *, outp,
         return kern_select(n, inp, outp, exp, tvp);
 }
 ```
-我们可以看到这个系统调用实际上是函数```kern_select```:
+我们可以看到这个系统调用实际上是函数```kern_select```，
+其中表示监控的文件的数据结构是```fd_set``` 在```include/linux/types.h```中定义，实际上是```__kernel_fd_set```，
+
+```c
+#define __FD_SETSIZE	1024
+
+typedef struct {
+	unsigned long fds_bits[__FD_SETSIZE / (8 * sizeof(long))];
+} __kernel_fd_set;
+```
+
+可以看到，fd_set实际上是long类型的数组，共1024位，我们可以使用FD_SET设置fd_set:
+
+```c
+#define FD_SETSIZE 256
+
+typedef struct { uint32_t fd32[FD_SETSIZE/32]; } fd_set;
+//此时的fd_set使用tools/include/nolibc/nolibc.h中的定义
+static __attribute__((unused))
+void FD_SET(int fd, fd_set *set)
+{
+	if (fd < 0 || fd >= FD_SETSIZE)
+		return;
+	set->fd32[fd / 32] |= 1 << (fd & 31);
+}
+```
+我们可以看到FD_SET是设置fd_set中的某一位，因此每一位代表一个打开文件的句柄。
 
 ```c
 static int kern_select(
@@ -46,18 +72,19 @@ static int kern_select(
         struct timespec64 end_time, *to = NULL;
         struct __kernel_old_timeval tv;
         int ret;
-
+        //tvp在用户空间，需要使用copy_from_user拷贝到内核
         if (tvp) {
                 if (copy_from_user(&tv, tvp, sizeof(tv)))
                         return -EFAULT;
-
                 to = &end_time;
-                if (poll_select_set_timeout(to,
-                                tv.tv_sec + (tv.tv_usec / USEC_PER_SEC),
-                                (tv.tv_usec % USEC_PER_SEC) * NSEC_PER_USEC))
+                //这里使用poll_select_set_timeout设置timeout的值（其实只是检查一下并拷贝）
+                if (poll_select_set_timeout(to, //timeout的指针
+                                tv.tv_sec + (tv.tv_usec / USEC_PER_SEC), //秒
+                                (tv.tv_usec % USEC_PER_SEC) * NSEC_PER_USEC) //纳秒
+                                )
                         return -EINVAL;
         }
-
+        //核心的功能在core_sys_select中实现
         ret = core_sys_select(n, inp, outp, exp, to);
         return poll_select_finish(
                     &end_time, 
@@ -97,6 +124,8 @@ int core_sys_select(int n, fd_set __user *inp, fd_set __user *outp,
 	 * We need 6 bitmaps (in/out/ex for both incoming and outgoing),
 	 * since we used fdset we need to allocate memory in units of
 	 * long-words. 
+         * 三个bitmap都需要“要求”和“结果”两个版本，
+         * 操作过程中共需要六个bitmap
 	 */
 	size = FDS_BYTES(n);
 	bits = stack_fds;
@@ -153,7 +182,11 @@ out_nofds:
 可以看到操作的主体是```do_select```：
 
 ```c
-static int do_select(int n, fd_set_bits *fds, struct timespec64 *end_time)
+static int do_select(
+    int n, 
+    fd_set_bits *fds, 
+    struct timespec64 *end_time
+    )
 {
 	ktime_t expire, *to = NULL;
 	struct poll_wqueues table;
