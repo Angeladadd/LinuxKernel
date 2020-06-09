@@ -424,7 +424,7 @@ static int max_select_fd(unsigned long n, fd_set_bits *fds)
 	struct fdtable *fdt;
 
 	/* handle last in-complete long-word first */
-	set = ~(~0UL << (n & (BITS_PER_LONG-1)));
+	set = ~(~0UL << (n & (BITS_PER_LONG-1)));//0UL：无符号长整型0
 	n /= BITS_PER_LONG;
 	fdt = files_fdtable(current->files);
 	open_fds = fdt->open_fds + n;

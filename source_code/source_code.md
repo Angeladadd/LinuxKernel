@@ -22,7 +22,7 @@ ag "SYSCALL.*(select|poll|epoll)" #查看系统调用的位置
 ```
 
 ### select
-
+select是IO多路复用的一种实现，它将需要监控的fd分为读，写，异常三类，使用fd_set表示，当其返回时要么是超时，要么是有至少一种读，写或异常事件发生。
 select的系统调用定义在```fs/select.c```中。
 
 ```c
@@ -58,11 +58,11 @@ void FD_SET(int fd, fd_set *set)
 	set->fd32[fd / 32] |= 1 << (fd & 31);
 }
 ```
-我们可以看到FD_SET是设置fd_set中的某一位，因此每一位代表一个打开文件的句柄。
+我们可以看到FD_SET是设置fd_set中的某一位，每一位用来表示一个 fd, 这也就是 select针对读，定或异常每一类最多只能有 1024个fd 限制的由来。
 
 ```c
 static int kern_select(
-    int n, //参数表有几个位图
+    int n, //这个n是三类不同的fd_set中所包括的fd数值的最大值+1, linux task打开句柄从0开始，不加1的话可能会少监控fd
     fd_set __user *inp, //当前进程在睡眠中等待来自哪一些已打开文件的输入
     fd_set __user *outp, //等待哪些文件的写操作
     fd_set __user *exp, //监视哪些通道发生了异常
@@ -94,7 +94,15 @@ static int kern_select(
 }
 ```
 
-可以看到主要的逻辑在```core_sys_select```中，它与系统调用的参数仅有to不同，它通过poll_select_set_timeout和tvp设置。
+可以看到主要的逻辑在```core_sys_select```中，它与系统调用的参数仅有to不同，它本质上是tvp在内核中的拷贝。
+
+fd_set_bits包含了in,out,ex的参数和结果，共6个bitmaps。
+```c
+typedef struct {
+	unsigned long *in, *out, *ex;
+	unsigned long *res_in, *res_out, *res_ex;
+} fd_set_bits;
+```
 
 ```c
 int core_sys_select(int n, fd_set __user *inp, fd_set __user *outp,
@@ -124,8 +132,6 @@ int core_sys_select(int n, fd_set __user *inp, fd_set __user *outp,
 	 * We need 6 bitmaps (in/out/ex for both incoming and outgoing),
 	 * since we used fdset we need to allocate memory in units of
 	 * long-words. 
-         * 三个bitmap都需要“要求”和“结果”两个版本，
-         * 操作过程中共需要六个bitmap
 	 */
 	size = FDS_BYTES(n);
 	bits = stack_fds;
@@ -155,6 +161,7 @@ int core_sys_select(int n, fd_set __user *inp, fd_set __user *outp,
 	zero_fd_set(n, fds.res_out);
 	zero_fd_set(n, fds.res_ex);
 
+//其实上面的一大坨操作都是在拷贝用户空间的fd_set到内核态，以及安全性检查、初始化之类的工作，最主要的逻辑在do_select中
 	ret = do_select(n, &fds, end_time);
 
 	if (ret < 0)
@@ -165,7 +172,7 @@ int core_sys_select(int n, fd_set __user *inp, fd_set __user *outp,
 			goto out;
 		ret = 0;
 	}
-
+   //返回结果复制回用户空间
 	if (set_fd_set(n, inp, fds.res_in) ||
 	    set_fd_set(n, outp, fds.res_out) ||
 	    set_fd_set(n, exp, fds.res_ex))
@@ -184,8 +191,8 @@ out_nofds:
 ```c
 static int do_select(
     int n, 
-    fd_set_bits *fds, 
-    struct timespec64 *end_time
+    fd_set_bits *fds, //(res_)(in/out/ex)六个位图
+    struct timespec64 *end_time //timeout
     )
 {
 	ktime_t expire, *to = NULL;
@@ -197,100 +204,157 @@ static int do_select(
 	unsigned long busy_start = 0;
 
 	rcu_read_lock();
+    //计算出本次操作涉及的最大已打开文件号
 	retval = max_select_fd(n, fds);
 	rcu_read_unlock();
 
 	if (retval < 0)
 		return retval;
+    //所有号码高于最大已打开文件号的文件与本次操作无关
 	n = retval;
+```
 
-	poll_initwait(&table);
-	wait = &table.pt;
-	if (end_time && !end_time->tv_sec && !end_time->tv_nsec) {
-		wait->_qproc = NULL;
-		timed_out = 1;
-	}
+poll_wqueues这个结构体的定义为：
+```c
+struct poll_wqueues {
+	poll_table pt;
+	struct poll_table_page *table;
+	struct task_struct *polling_task;
+	int triggered;
+	int error;
+	int inline_index;
+	struct poll_table_entry inline_entries[N_INLINE_POLL_ENTRIES];
+};
+```
+poll_initwait()的定义为：
+```c
+void poll_initwait(struct poll_wqueues *pwq)
+{
+	init_poll_funcptr(&pwq->pt, __pollwait); //实际上主要是对poll_table pt进行了初始化，设置了_qproc函数
+	pwq->polling_task = current;
+	pwq->triggered = 0;
+	pwq->error = 0;
+	pwq->table = NULL;
+	pwq->inline_index = 0;
+}
+```
 
-	if (end_time && !timed_out)
-		slack = select_estimate_accuracy(end_time);
+```c
+    //do_select(int n, fd_set_bits *fds, struct timespec64 *end_time)
+    poll_initwait(&table);
+    wait = &table.pt;
+    if (end_time && !end_time->tv_sec && !end_time->tv_nsec) {
+        wait->_qproc = NULL;
+        timed_out = 1;  
+    }
 
-	retval = 0;
-	for (;;) {
-		unsigned long *rinp, *routp, *rexp, *inp, *outp, *exp;
-		bool can_busy_loop = false;
+    if (end_time && !timed_out)
+        slack = select_estimate_accuracy(end_time);
 
-		inp = fds->in; outp = fds->out; exp = fds->ex;
-		rinp = fds->res_in; routp = fds->res_out; rexp = fds->res_ex;
+    retval = 0;
+    //最外面是一个无限循环，它只有在poll到有效的事件，或者超时，或者有中断发生时，才会退出
+    for (;;) {
+        unsigned long *rinp, *routp, *rexp, *inp, *outp, *exp;
+        bool can_busy_loop = false;
+    // 首先获取需要监控的三类fd_set
+        inp = fds->in; outp = fds->out; exp = fds->ex;
+        // 初始化用于保存返回值的三类 fd_set对应的unsigned long 数组
+        rinp = fds->res_in; routp = fds->res_out; rexp = fds->res_ex;
+        // 开始循环遍历覆盖的所有fd
+        for (i = 0; i < n; ++rinp, ++routp, ++rexp) {
+            unsigned long in, out, ex, all_bits, bit = 1, j;
+            unsigned long res_in = 0, res_out = 0, res_ex = 0;
+            __poll_t mask;
 
-		for (i = 0; i < n; ++rinp, ++routp, ++rexp) {
-			unsigned long in, out, ex, all_bits, bit = 1, j;
-			unsigned long res_in = 0, res_out = 0, res_ex = 0;
-			__poll_t mask;
+            in = *inp++; out = *outp++; ex = *exp++;
+            all_bits = in | out | ex;
+            //当前的3个long中的每一位均为0，不存在监控的fd，换下一个long
+            if (all_bits == 0) {
+                i += BITS_PER_LONG;
+                continue;
+            }
+            //遍历一个long中的64个bit
+            for (j = 0; j < BITS_PER_LONG; ++j, ++i, bit <<= 1) {
+                struct fd f;
+                if (i >= n)
+                    break;
+                //该bit无监控的fd
+                if (!(bit & all_bits))
+                    continue;
+                f = fdget(i);
+                if (f.file) {
+                    //针对当前fd, 设置其需要监控的事件
+                    wait_key_set(wait, in, out, bit,busy_flag);
+                    //初始化wait entry, 将其加入到这个fd对应的socket的等待队列中
+                    //获取当前socket是否有读，写，异常等事件并返回
+                    mask = vfs_poll(f.file, wait);
+```
+vfs_poll定义在poll.h中：
 
-			in = *inp++; out = *outp++; ex = *exp++;
-			all_bits = in | out | ex;
-			if (all_bits == 0) {
-				i += BITS_PER_LONG;
-				continue;
-			}
+```c
+static inline __poll_t vfs_poll(struct file *file, struct poll_table_struct *pt)
+{
+	if (unlikely(!file->f_op->poll))
+		return DEFAULT_POLLMASK;
+	return file->f_op->poll(file, pt);
+}
+```
+这个poll函数是根据file的f_op中的poll定义的，不同的file可能会不同，针对网络通信，poll最终会经过vfs_poll -> file->f_op->poll -> sock_poll -> tcp->poll的路线。
 
-			for (j = 0; j < BITS_PER_LONG; ++j, ++i, bit <<= 1) {
-				struct fd f;
-				if (i >= n)
-					break;
-				if (!(bit & all_bits))
-					continue;
-				f = fdget(i);
-				if (f.file) {
-					wait_key_set(wait, in, out, bit,
-						     busy_flag);
-					mask = vfs_poll(f.file, wait);
+```c
+//do_select()
+                    fdput(f);
+                    //按位与，看是否有相关事件，有就将res的位设为1，retval++，wait的qproc函数置空
+                    if ((mask & POLLIN_SET) && (in & bit)) {
+                        res_in |= bit;
+                        retval++;
+                        wait->_qproc = NULL;
+                    }
+                    if ((mask & POLLOUT_SET) && (out & bit)) {
+                        res_out |= bit;
+                        retval++;
+                        wait->_qproc = NULL;
+                    }
+                    if ((mask & POLLEX_SET) && (ex & bit)) {
+                        res_ex |= bit;
+                        retval++;
+                        wait->_qproc = NULL;
+                    }
+                    /* got something, stop busy polling */
+                    if (retval) {
+                        can_busy_loop = false;
+                        busy_flag = 0;
 
-					fdput(f);
-					if ((mask & POLLIN_SET) && (in & bit)) {
-						res_in |= bit;
-						retval++;
-						wait->_qproc = NULL;
-					}
-					if ((mask & POLLOUT_SET) && (out & bit)) {
-						res_out |= bit;
-						retval++;
-						wait->_qproc = NULL;
-					}
-					if ((mask & POLLEX_SET) && (ex & bit)) {
-						res_ex |= bit;
-						retval++;
-						wait->_qproc = NULL;
-					}
-					/* got something, stop busy polling */
-					if (retval) {
-						can_busy_loop = false;
-						busy_flag = 0;
-
-					/*
-					 * only remember a returned
-					 * POLL_BUSY_LOOP if we asked for it
-					 */
-					} else if (busy_flag & mask)
-						can_busy_loop = true;
-
-				}
-			}
-			if (res_in)
-				*rinp = res_in;
-			if (res_out)
-				*routp = res_out;
-			if (res_ex)
-				*rexp = res_ex;
-			cond_resched();
-		}
-		wait->_qproc = NULL;
-		if (retval || timed_out || signal_pending(current))
-			break;
-		if (table.error) {
-			retval = table.error;
-			break;
-		}
+                    /*
+                     * only remember a returned
+                     * POLL_BUSY_LOOP if we asked for it
+                     */
+                    } else if (busy_flag & mask)
+                        can_busy_loop = true;
+                    }
+            }
+             // 按unsigned long赋值给返回值数组元素
+            if (res_in)
+                *rinp = res_in;
+            if (res_out)
+                *routp = res_out;
+            if (res_ex)
+                *rexp = res_ex;
+            //这里主动出让CPU, 进行一次调度
+            cond_resched();
+        }
+        wait->_qproc = NULL;
+        // 四种情况下会返回
+         // 1. 任意监控的fd上有事件发生
+         // 2. 超时
+         // 3. 有中断发生
+        if (retval || timed_out || signal_pending(current))
+            break;
+        // 4. wait queue相关操作发生错误
+        if (table.error) {
+            retval = table.error;
+            break;
+        }
 
 		/* only if found POLL_BUSY_LOOP sockets && not out of time */
 		if (can_busy_loop && !need_resched()) {
@@ -313,8 +377,10 @@ static int do_select(
 			to = &expire;
 		}
 
-		if (!poll_schedule_timeout(&table, TASK_INTERRUPTIBLE,
-					   to, slack))
+        //  当前监控的fd上没有事件发生，也没有超时或中断发生，
+         //   将当前进程设置为 TASK_INTERRUPTIBLE， 并调用 schedule
+         //   等待事件发生时，对应的socket将当前进程唤醒后，从这里继续运行
+		if (!poll_schedule_timeout(&table, TASK_INTERRUPTIBLE, to, slack))
 			timed_out = 1;
 	}
 
@@ -329,6 +395,42 @@ static int do_select(
 
 poll的系统调用定义在```fs/select.c```中。
 
+```c
+SYSCALL_DEFINE3(poll, struct pollfd __user *, ufds, unsigned int, nfds,
+		int, timeout_msecs)
+{
+	struct timespec64 end_time, *to = NULL;
+	int ret;
+
+	if (timeout_msecs >= 0) {
+		to = &end_time;
+		poll_select_set_timeout(to, timeout_msecs / MSEC_PER_SEC,
+			NSEC_PER_MSEC * (timeout_msecs % MSEC_PER_SEC));
+	}
+
+	ret = do_sys_poll(ufds, nfds, to);
+
+	if (ret == -ERESTARTNOHAND) {
+		struct restart_block *restart_block;
+
+		restart_block = &current->restart_block;
+		restart_block->fn = do_restart_poll;
+		restart_block->poll.ufds = ufds;
+		restart_block->poll.nfds = nfds;
+
+		if (timeout_msecs >= 0) {
+			restart_block->poll.tv_sec = end_time.tv_sec;
+			restart_block->poll.tv_nsec = end_time.tv_nsec;
+			restart_block->poll.has_timeout = 1;
+		} else
+			restart_block->poll.has_timeout = 0;
+
+		ret = -ERESTART_RESTARTBLOCK;
+	}
+	return ret;
+}
+```
+
 ### epoll
 
 epoll的系统调用定义在```fs/eventpoll.c```中。
@@ -338,6 +440,7 @@ epoll的系统调用定义在```fs/eventpoll.c```中。
 - 《Linux内核源代码情景分析》
 - https://zhuanlan.zhihu.com/p/141447239
 - https://www.linuxprobe.com/linux-io-multiplexing.html
+- https://zhuanlan.zhihu.com/p/91428595
 
 
 
