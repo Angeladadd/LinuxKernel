@@ -362,12 +362,13 @@ static void __pollwait(struct file *filp, wait_queue_head_t *wait_address, poll_
 ```
 
 ```c
-//do_select()
+/////do_select（续）//////
                     fdput(f);
                     //按位与，看是否有相关事件
                     if ((mask & POLLIN_SET) && (in & bit)) {
                         res_in |= bit;
                         retval++;
+                        //所有的waiters已注册，因此不需要为下一轮循环提供poll_table->_qproc
                         wait->_qproc = NULL;
                     }
                     if ((mask & POLLOUT_SET) && (out & bit)) {
@@ -438,7 +439,6 @@ static void __pollwait(struct file *filp, wait_queue_head_t *wait_address, poll_
 
         //当前监控的fd上没有事件发生，也没有超时或中断发生，
         //将当前进程设置为 TASK_INTERRUPTIBLE，并调用 schedule
-        //等待事件发生时，对应的socket将当前进程唤醒后，从这里继续运行
         if (!poll_schedule_timeout(&table, TASK_INTERRUPTIBLE, to, slack))
         timed_out = 1;
     }
@@ -537,7 +537,6 @@ static int do_sys_poll(struct pollfd __user *ufds, unsigned int nfds,
 	/* Allocate small arguments on the stack to save memory and be
 	   faster - use long to make sure the buffer is aligned properly
 	   on 64 bit archs to avoid unaligned access */
-    //创建大小为256的数组
 	long stack_pps[POLL_STACK_ALLOC/sizeof(long)];
     //这里和select的实现不同，poll是使用链表实现的，因此避免了只能监控有限个文件的问题
 	struct poll_list *const head = (struct poll_list *)stack_pps;
@@ -558,25 +557,23 @@ struct poll_list {
 这里有一个诡异的地方是entries字段是一个长度为0的数组，[它的作用与指针相同，但可以方便内存管理](https://www.cnblogs.com/felove2013/articles/4050226.html)。
 
 ```c
-//do_sys_poll()
+/////do_sys_poll（续）//////
 	if (nfds > rlimit(RLIMIT_NOFILE))
 		return -EINVAL;
 
 	len = min_t(unsigned int, nfds, N_STACK_PPS);
+	//将用户传入的pollfd数组拷贝到内核空间
 	for (;;) {
 		walk->next = NULL;
 		walk->len = len;
 		if (!len)
 			break;
-//将用户传入的pollfd数组拷贝到内核空间
 		if (copy_from_user(walk->entries, ufds + nfds-todo,
 					sizeof(struct pollfd) * walk->len))
 			goto out_fds;
-
 		todo -= walk->len;
 		if (!todo)
 			break;
-
 		len = min(todo, POLLFD_PER_PAGE);
 		walk = walk->next = kmalloc(struct_size(walk, entries, len),
 					    GFP_KERNEL);
@@ -585,22 +582,20 @@ struct poll_list {
 			goto out_fds;
 		}
 	}
-
+	//和select相同
 	poll_initwait(&table);
-    //核心逻辑
+	//核心逻辑
 	fdcount = do_poll(head, &table, end_time);
+	//和select相同
 	poll_freewait(&table);
-
+	//将revents值拷贝到用户空间ufds
 	for (walk = head; walk; walk = walk->next) {
 		struct pollfd *fds = walk->entries;
 		int j;
-
-        //将revents值拷贝到用户空间ufds
 		for (j = 0; j < walk->len; j++, ufds++)
 			if (__put_user(fds[j].revents, &ufds->revents))
 				goto out_fds;
   	}
-
 	err = fdcount;
 out_fds:
 	walk = head->next;
@@ -609,7 +604,6 @@ out_fds:
 		walk = walk->next;
 		kfree(pos);
 	}
-
 	return err;
 }
 ```
@@ -620,8 +614,8 @@ poll的核心逻辑在do\_poll中，
 ```c
 static int do_poll(
     struct poll_list *list, //监控的文件列表
-    struct poll_wqueues *wait, 
-	struct timespec64 *end_time
+    struct poll_wqueues *wait, //统一辅佐该进程进行轮训监控fd的工作
+	struct timespec64 *end_time //超时
     )
 {
 	poll_table* pt = &wait->pt;
@@ -653,7 +647,7 @@ static int do_poll(
 			pfd_end = pfd + walk->len;
             //这里就是遍历poll_list每一个元素的entries，也就是pollfd数组
 			for (; pfd != pfd_end; pfd++) {
-                //此后的逻辑和select十分相像，这里抽象除了一个do_pollfd的函数，用于
+                //此后的逻辑和select十分相像，这里抽象除了一个do_pollfd的函数，用于：
 				/*
 				 * Fish for events. If we found one, record it
 				 * and kill poll_table->_qproc, so we don't
@@ -678,10 +672,10 @@ static int do_poll(
 		pt->_qproc = NULL;
 		if (!count) {
 			count = wait->error;
-			if (signal_pending(current))
+			if (signal_pending(current))//有待处理信号，则跳出循环
 				count = -ERESTARTNOHAND;
 		}
-		if (count || timed_out)
+		if (count || timed_out)//监控事件触发，或者超时则跳出循环
 			break;
 
 		/* only if found POLL_BUSY_LOOP sockets && not out of time */
@@ -704,16 +698,13 @@ static int do_poll(
 			expire = timespec64_to_ktime(*end_time);
 			to = &expire;
 		}
-
+		//设置进程状态
 		if (!poll_schedule_timeout(wait, TASK_INTERRUPTIBLE, to, slack))
 			timed_out = 1;
 	}
 	return count;
 }
 ```
-
-do\_pollfd
-
 
 ```c
 static inline __poll_t do_pollfd(struct pollfd *pollfd, poll_table *pwait,
