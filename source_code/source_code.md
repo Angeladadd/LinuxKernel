@@ -229,14 +229,14 @@ struct poll_wqueues {
 };
 
 typedef struct poll_table_struct {
-    poll_queue_proc _qproc; //会在后面的f_op->的poll过程调用
+    poll_queue_proc _qproc; //会在后面的f_op->poll过程调用
     __poll_t _key;
 } poll_table;
 
 struct poll_table_page {
     struct poll_table_page * next;
-    struct poll_table_entry * entry; //wait等待队列项
-    struct poll_table_entry entries[0]; //wait的等待队列头
+    struct poll_table_entry * entry; //最后一个entry项
+    struct poll_table_entry entries[0]; //entry队列头
 };
 
 struct poll_table_entry {
@@ -368,7 +368,7 @@ static void __pollwait(struct file *filp, wait_queue_head_t *wait_address, poll_
                     if ((mask & POLLIN_SET) && (in & bit)) {
                         res_in |= bit;
                         retval++;
-                        //所有的waiters已注册，因此不需要为下一轮循环提供poll_table->_qproc
+                        //不需要为下一轮循环提供poll_table->_qproc
                         wait->_qproc = NULL;
                     }
                     if ((mask & POLLOUT_SET) && (out & bit)) {
@@ -442,7 +442,7 @@ static void __pollwait(struct file *filp, wait_queue_head_t *wait_address, poll_
         if (!poll_schedule_timeout(&table, TASK_INTERRUPTIBLE, to, slack))
         timed_out = 1;
     }
-    //当进程唤醒后，将就绪事件结果保存在fds的res_in、res_out、res_ex，
+    //当进程唤醒后
     //将进程从所有的等待队列中移除
     poll_freewait(&table);
 
@@ -471,6 +471,11 @@ void poll_freewait(struct poll_wqueues *pwq)
         p = p->next;
         free_page((unsigned long) old);
     }
+}
+static void free_poll_entry(struct poll_table_entry *entry)
+{
+	remove_wait_queue(entry->wait_address, &entry->wait);
+	fput(entry->filp);
 }
 ```
 
@@ -753,6 +758,20 @@ poll缺点
 
 * 从上面看select和poll都需要在返回后，通过遍历文件描述符来获取已经就绪的文件。同时连接的大量文件在同一时刻可能只有很少的处于就绪状态，因此随着监视的描述符数量的增长，其性能会线性下降。
 
+epoll是select和poll的加强版，根据epoll的使用方式，我们可以看到epoll将维护监控文件列表与等待分开处理，进而避免了反复遍历的问题。
+
+```c
+int epfd = epoll_create(...);
+epoll_ctl(epfd, ...); //将所有需要监听的file添加到epfd中
+
+while(1){
+    int n = epoll_wait(...)
+    for(接收到数据的file){
+        //处理
+    }
+}
+```
+
 epoll优势
 
 * 监视的描述符数量不受限制，所支持的FD上限是最大可以打开文件的数目，具体数目可以cat /proc/sys/fs/file-max查看
@@ -792,7 +811,7 @@ struct eventpoll {
 	struct wakeup_source *ws;//当ep_scan_ready_list运行时使用wakeup_source
 	struct user_struct *user;//创建eventpoll描述符的用户
 	struct file *file;//指向当前这个eventpoll结构
-	int visited;
+	int visited;//用于环路检测的优化
 	struct list_head visited_list_link;
 };
 
@@ -1583,14 +1602,25 @@ fetch_events:
 		 * repeatedly.
 		 */
 		if (fatal_signal_pending(current)) {
-		//有待处理信号，则跳出循环
 			res = -EINTR;
 			break;
 		}
 
 		eavail = ep_events_available(ep);
+```
+
+```c
+static inline int ep_events_available(struct eventpoll *ep)
+{
+	return !list_empty_careful(&ep->rdllist) ||
+		READ_ONCE(ep->ovflist) != EP_UNACTIVE_PTR;
+}
+```
+
+```c
+/////ep_poll(续)//////
 		if (eavail)
-		//就绪队列不为空 或者超时，则跳出循环
+		//就绪队列不为空，则跳出循环
 			break;
 		if (signal_pending(current)) {
 		//有待处理信号，则跳出循环
