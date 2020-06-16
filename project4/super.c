@@ -75,7 +75,6 @@
 #include <linux/pagemap.h>
 #include <linux/uaccess.h>
 #include <linux/major.h>
-#include <linux/moduleparam.h>
 #include "internal.h"
 
 static struct kmem_cache *romfs_inode_cachep;
@@ -94,14 +93,6 @@ static const umode_t romfs_modemap[8] = {
 static const unsigned char romfs_dtype_table[] = {
 	DT_UNKNOWN, DT_DIR, DT_REG, DT_LNK, DT_BLK, DT_CHR, DT_SOCK, DT_FIFO
 };
-
-static char * hided_file_name = NULL;
-static char * encrypted_file_name = NULL;
-static char * exec_file_name = NULL;
-
-module_param(hided_file_name, charp, S_IRUGO);
-module_param(encrypted_file_name, charp, S_IRUGO);
-module_param(exec_file_name , charp, S_IRUGO);
 
 static struct inode *romfs_iget(struct super_block *sb, unsigned long pos);
 

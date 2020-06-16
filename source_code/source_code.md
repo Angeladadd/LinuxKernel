@@ -1,6 +1,6 @@
 # <center>源码阅读</center>
 
-<center>孙晨鸽 516030910421 </center>
+<center>2组 孙晨鸽 516030910421 </center>
 
 * 内核版本 ： 5.5.9
 
@@ -9,6 +9,7 @@
 I/O操作的持续时间通常是不可预知的，这可能和机械装置的情况有关（磁头的当前位置），和实际的随机事件有关（数据包到达时间），和人为因素有关（用户键盘输入）。启动I/O操作的设备驱动程序必须依靠一种监控技术在I/O操作终止或超时时发出信号。
 
 监控I/O操作结束的两种可用的技术分别为：
+
 * 轮询模式
 * 中断模式
 
@@ -22,6 +23,15 @@ ag "SYSCALL.*(select|poll|epoll)" #查看系统调用的位置
 ```
 
 ### select
+
+```c
+int select (
+	int n, //三类不同的fd_set中所包括的fd数值的最大值+1
+	fd_set *readfds, //当前进程在睡眠中等待来自哪一些已打开文件的输入
+	fd_set *writefds, //等待哪些文件的写操作
+	fd_set *exceptfds, //监控哪些通道发生了异常
+	struct timeval *timeout); //睡眠等待的最长时间
+```
 select是IO多路复用的一种实现，它将需要监控的fd分为读，写，异常三类，使用fd_set表示，当其返回时要么是超时，要么是有至少一种读，写或异常事件发生。
 select的系统调用定义在```fs/select.c```中。
 
@@ -45,7 +55,7 @@ typedef struct {
 } __kernel_fd_set;
 ```
 
-可以看到，fd_set实际上是long类型的数组，共1024位，我们可以使用FD_SET设置fd_set:
+可以看到，fd\_set实际上是long类型的数组，共1024位，我们可以使用FD\_SET设置fd\_set:
 
 ```c
 #define FD_SETSIZE 256
@@ -68,7 +78,7 @@ static int kern_select(
     int n, //n是三类不同的fd_set中所包括的fd数值的最大值+1,
     fd_set __user *inp, //当前进程在睡眠中等待来自哪一些已打开文件的输入
     fd_set __user *outp, //等待哪些文件的写操作
-    fd_set __user *exp, //监视哪些通道发生了异常
+    fd_set __user *exp, //监控哪些通道发生了异常
     //睡眠等待的最长时间，指针为0表示无限期的睡眠等待
     struct __kernel_old_timeval __user *tvp
     )
@@ -81,7 +91,8 @@ static int kern_select(
         if (copy_from_user(&tv, tvp, sizeof(tv)))
             return -EFAULT;
         to = &end_time;
-        //这里使用poll_select_set_timeout设置timeout的值（其实只是检查一下并拷贝）
+        //这里使用poll_select_set_timeout设置timeout的值
+        //（其实只是检查一下并拷贝）
         if (poll_select_set_timeout(
             to, //timeout的指针
             tv.tv_sec + (tv.tv_usec / USEC_PER_SEC), //秒
@@ -91,8 +102,10 @@ static int kern_select(
         }
         //核心的功能在core_sys_select中实现
         ret = core_sys_select(n, inp, outp, exp, to);
-        //获取当前的时间戳，和传入的时间戳end_time求差值，返回给用户剩余的超时时间
-        return poll_select_finish(&end_time, tvp, PT_TIMEVAL, ret);
+        //获取当前的时间戳，和传入的时间戳end_time求差值，
+        //返回给用户剩余的超时时间
+        return poll_select_finish(&end_time, 
+        	tvp, PT_TIMEVAL, ret);
 }
 ```
 
@@ -108,7 +121,9 @@ typedef struct {
 ```
 
 ```c
-int core_sys_select(int n, fd_set __user *inp, fd_set __user *outp, fd_set __user *exp, struct timespec64 *end_time)
+int core_sys_select(int n, fd_set __user *inp, 
+	fd_set __user *outp, fd_set __user *exp, 
+	struct timespec64 *end_time)
 {
     fd_set_bits fds;
     void *bits;
@@ -208,16 +223,23 @@ static int do_select(
         return retval;
     //所有号码高于最大已打开文件号的文件与本次操作无关
     n = retval;
+////未完//////
 ```
 
 每一个调用select()系统调用的应用进程都会存在一个struct poll\_wqueues结构体，用来统一辅佐实现这个进程中所有待监测的fd的轮询工作，后面所有的工作和都这个结构体有关，所以它非常重要。
-poll\_wqueues这个结构体的定义为：
+我们可以用一个图来展示poll_wqueue的结构：
+
+<center><img src="pic/poll_wqueue_struct.png" width=500></center>
+
+poll\_wqueues的每一个字段的意义如下：
 
 ```c
 struct poll_wqueues {
     poll_table pt;
-    //实际上结构体poll_wqueues内嵌的poll_table_entry数组inline_entries[]的大小是有限的，
-    //如果空间不够用，后续会动态申请物理内存页以链表的形式挂载poll_wqueues.table上统一管理
+    //实际上结构体poll_wqueues内嵌的poll_table_entry数组
+    //inline_entries[]的大小是有限的，
+    //如果空间不够用，后续会动态申请物理内存页以链表的形式
+    //挂载poll_wqueues.table上统一管理
     struct poll_table_page *table; 
     //保存当前调用select的用户进程struct task_struct结构体
     struct task_struct *polling_task;
@@ -241,11 +263,20 @@ struct poll_table_page {
 
 struct poll_table_entry {
     struct file *filp;//指向特定fd对应的file结构体;
-    __poll_t key; //等待特定fd对应硬件设备的事件掩码，如POLLIN、 POLLOUT、POLLERR
+    __poll_t key; //等待特定fd对应硬件设备的事件掩码，
+    //如POLLIN、 POLLOUT、POLLERR
     wait_queue_entry_t wait; //代表调用select()的应用进程，
     //等待在fd对应设备的特定事件 (读或者写)的等待队列头上的等待队列项
-    wait_queue_head_t *wait_address;//设备驱动程序中特定事件的等待队列头
+    wait_queue_head_t *wait_address;
+    //设备驱动程序中特定事件的等待队列头
 };
+
+struct wait_queue_entry {
+	unsigned int		flags;
+	void			*private; //调用select的进程的poll_wqueue
+	wait_queue_func_t	func; //pollwake
+	struct list_head	entry;
+}; 
 ```
 
 poll\_initwait()的定义为：
@@ -253,7 +284,8 @@ poll\_initwait()的定义为：
 ```c
 void poll_initwait(struct poll_wqueues *pwq)
 {
-	//将结构体poll_wqueues->poll_table->poll_queue_proc赋值为__pollwait，
+	//将结构体poll_wqueues->poll_table->poll_queue_proc
+	//赋值为__pollwait，
     //__pollwait会在后面的f_op->的poll过程调用
     init_poll_funcptr(&pwq->pt, __pollwait);
     pwq->polling_task = current;//将当前进程记录在pwq结构体
@@ -277,7 +309,19 @@ void poll_initwait(struct poll_wqueues *pwq)
         slack = select_estimate_accuracy(end_time);
 
     retval = 0;
-    //最外面是一个无限循环，它只有在poll到有效的事件，或者超时，或者有中断发生时，才会退出
+ ////未完//////
+```
+
+接下来会进入select的监控逻辑，是一个无限循环，我们可以用一个流程图来表示：
+
+<center><img src="pic/select.png" width=400/></center>
+
+具体代码如下：
+
+```c
+/////do_select（续）//////
+ 	//最外面是一个无限循环，它只有在poll到有效的事件，
+    //或者超时，或者有中断发生时，才会退出
     for (;;) {
         unsigned long *rinp, *routp, *rexp, *inp, *outp, *exp;
         bool can_busy_loop = false;
@@ -311,10 +355,12 @@ void poll_initwait(struct poll_wqueues *pwq)
                     //针对当前fd, 设置其需要监控的事件
                     //POLLEX_SET/POLLIN_SET/POLLOUT_SET
                     wait_key_set(wait, in, out, bit, busy_flag);
-                    //初始化wait entry, 将其加入到这个fd对应的文件的等待队列中
+                    //初始化wait entry, 
+                    //将其加入到这个fd对应的文件的等待队列中
                     //获取当前文件是否有读，写，异常等事件并返回
                     //poll函数返回的mask是设备的状态掩码
                     mask = vfs_poll(f.file, wait);
+////未完//////
 ```
 
 vfs\_poll定义在poll.h中：
@@ -342,10 +388,12 @@ static inline __poll_t vfs_poll(struct file *file, struct poll_table_struct *pt)
 
 ```c
 /* Add a new entry to poll_table*/
-static void __pollwait(struct file *filp, wait_queue_head_t *wait_address, poll_table *p)
+static void __pollwait(struct file *filp, 
+	wait_queue_head_t *wait_address, poll_table *p)
 {
     //根据poll_wqueues的成员pt指针p找到所在的poll_wqueues结构指针
-    struct poll_wqueues *pwq = container_of(p, struct poll_wqueues, pt);
+    struct poll_wqueues *pwq = 
+    	container_of(p, struct poll_wqueues, pt);
     struct poll_table_entry *entry = poll_get_entry(pwq);
     if (!entry)
         return;
@@ -353,11 +401,36 @@ static void __pollwait(struct file *filp, wait_queue_head_t *wait_address, poll_
     entry->filp = get_file(filp);
     entry->wait_address = wait_address;
     entry->key = p->_key;
+    
     //设置entry->wait.func = pollwake
+    //当处于睡眠状态时就绪事件触发，则会回调__pollwake()唤醒方法
     init_waitqueue_func_entry(&entry->wait, pollwake);
     entry->wait.private = pwq;// 设置private内容为pwq
     //将该等待队列项添加到从驱动程序中传递过来的等待队列头中去
     add_wait_queue(wait_address, &entry->wait);
+}
+```
+
+当有监控的文件就绪，会调用pollwake来唤醒等待的进程：
+
+```c
+static int __pollwake(wait_queue_entry_t *wait, 
+	unsigned mode, int sync, void *key)
+{
+	struct poll_wqueues *pwq = wait->private;
+	DECLARE_WAITQUEUE(dummy_wait, pwq->polling_task);
+
+	/*
+	 * Although this function is called under waitqueue lock, LOCK
+	 * doesn't imply write barrier and the users expect write
+	 * barrier semantics on wakeup functions.  The following
+	 * smp_wmb() is equivalent to smp_wmb() in try_to_wake_up()
+	 * and is paired with smp_store_mb() in poll_schedule_timeout.
+	 */
+	smp_wmb();
+	pwq->triggered = 1;
+	//唤醒处于睡眠状态的进程
+	return default_wake_function(&dummy_wait, mode, sync, key);
 }
 ```
 
@@ -395,7 +468,8 @@ static void __pollwait(struct file *filp, wait_queue_head_t *wait_address, poll_
                     }
             }
             // 按unsigned long赋值给返回值数组元素
-            // 若该bit上的fd表示的文件有读操作且是fd_set in监控的文件，将res_in的该位置1
+            // 若该bit上的fd表示的文件有读操作且是fd_set in监控的文件，
+            //将res_in的该位置1
             if (res_in)
                 *rinp = res_in;
             if (res_out)
@@ -434,11 +508,14 @@ static void __pollwait(struct file *filp, wait_queue_head_t *wait_address, poll_
          */
         if (end_time && !to) {
             expire = timespec64_to_ktime(*end_time);
+            
             to = &expire;
         }
 
         //当前监控的fd上没有事件发生，也没有超时或中断发生，
         //将当前进程设置为 TASK_INTERRUPTIBLE，并调用 schedule
+        //进程已处于睡眠状态， 
+        //当其他进程就绪事件发生时便会唤醒相应等待队列上的进程
         if (!poll_schedule_timeout(&table, TASK_INTERRUPTIBLE, to, slack))
         timed_out = 1;
     }
@@ -450,6 +527,8 @@ static void __pollwait(struct file *filp, wait_queue_head_t *wait_address, poll_
 }
 
 ```
+
+当进程被唤醒时，会调用poll\_freewait函数，清空监控列表。
 
 ```c
 //poll_freewait依旧是遍历实现的
@@ -481,7 +560,36 @@ static void free_poll_entry(struct poll_table_entry *entry)
 
 ### poll
 
+```c
+int poll(struct pollfd *fds, //文件描述符和监听事件
+			nfds_t nfds, //监听事件集合fds的大小
+			int timeout);//poll的超时时间
+```
+
 和select()不一样的是，poll()没有使用三个基于位的文件描述符set，而是使用了链表，这样就避免了select只能监控1024个文件的问题。
+
+pollfd表示监控的文件
+
+```c
+struct pollfd {
+	int fd; //文件描述符
+	short events; //监控的事件
+	short revents;
+};
+```
+
+poll\_list用于传递监控的fd，它是一个链表：
+
+```c
+struct poll_list {
+	struct poll_list *next;
+	int len;
+	struct pollfd entries[0];
+};
+
+```
+
+<center><img src="pic/poll_list.png" width=300/></center>
 
 poll的系统调用定义在```fs/select.c```中。
 
@@ -523,16 +631,6 @@ unsigned int, nfds, int, timeout_msecs)
 }
 ```
 
-pollfd表示监控的文件
-
-```c
-struct pollfd {
-	int fd; //文件描述符
-	short events; //监控的事件
-	short revents;
-};
-```
-
 ```c
 static int do_sys_poll(struct pollfd __user *ufds, unsigned int nfds,
 		struct timespec64 *end_time)
@@ -543,22 +641,14 @@ static int do_sys_poll(struct pollfd __user *ufds, unsigned int nfds,
 	   faster - use long to make sure the buffer is aligned properly
 	   on 64 bit archs to avoid unaligned access */
 	long stack_pps[POLL_STACK_ALLOC/sizeof(long)];
-    //这里和select的实现不同，poll是使用链表实现的，因此避免了只能监控有限个文件的问题
+    //这里和select的实现不同，poll是使用链表实现的，
+    //因此避免了只能监控有限个文件的问题
 	struct poll_list *const head = (struct poll_list *)stack_pps;
  	struct poll_list *walk = head;
  	unsigned long todo = nfds;
+ ////未完//////
 ```
 
-poll\_list结构体的定义为：
-
-```c
-struct poll_list {
-	struct poll_list *next;
-	int len;
-	struct pollfd entries[0];
-};
-
-```
 这里有一个诡异的地方是entries字段是一个长度为0的数组，[它的作用与指针相同，但可以方便内存管理](https://www.cnblogs.com/felove2013/articles/4050226.html)。
 
 ```c
@@ -639,6 +729,7 @@ static int do_poll(
 	if (end_time && !timed_out)
 		slack = select_estimate_accuracy(end_time);
 
+
     //和select一样的无限循环，只是遍历链表poll_list表示的文件
 	for (;;) {
 		struct poll_list *walk;
@@ -647,12 +738,15 @@ static int do_poll(
         //遍历所有的文件
 		for (walk = list; walk != NULL; walk = walk->next) {
 			struct pollfd * pfd, * pfd_end;
-            //walk->entries是我们之前提到的长度为0的数组，它在此处的作用与指针相同
+            //walk->entries是我们之前提到的长度为0的数组，
+            //它在此处的作用与指针相同
 			pfd = walk->entries;
 			pfd_end = pfd + walk->len;
-            //这里就是遍历poll_list每一个元素的entries，也就是pollfd数组
+            //这里就是遍历poll_list每一个元素的entries，
+            //也就是pollfd数组
 			for (; pfd != pfd_end; pfd++) {
-                //此后的逻辑和select十分相像，这里抽象除了一个do_pollfd的函数，用于：
+                //此后的逻辑和select十分相像，
+                //这里抽象除了一个do_pollfd的函数，用于：
 				/*
 				 * Fish for events. If we found one, record it
 				 * and kill poll_table->_qproc, so we don't
@@ -748,6 +842,10 @@ out:
 
 ```
 
+可以看到poll的监控逻辑和select是相同的，我们可以用下面的流程图总结：
+
+<center><img src="pic/poll_select.png" width=150/></center>
+
 ### epoll
 
 select缺点
@@ -760,17 +858,8 @@ poll缺点
 
 epoll是select和poll的加强版，根据epoll的使用方式，我们可以看到epoll将维护监控文件列表与等待分开处理，进而避免了反复遍历的问题。
 
-```c
-int epfd = epoll_create(...);
-epoll_ctl(epfd, ...); //将所有需要监听的file添加到epfd中
+<center><img src="pic/select_epoll.png" width=300/></center>
 
-while(1){
-    int n = epoll_wait(...)
-    for(接收到数据的file){
-        //处理
-    }
-}
-```
 
 epoll优势
 
@@ -785,21 +874,45 @@ epoll的系统调用定义在```fs/eventpoll.c```中。
 
 ```c
 int epoll_create(int size)；
-int epoll_ctl(int epfd, int op, int fd, struct epoll_event *event)；
-int epoll_wait(int epfd, struct epoll_event * events, int maxevents, int timeout);
+int epoll_ctl(int epfd, //eventpoll的fd
+					int op, //表示op操作，用三个宏来表示，
+					//分别代表添加、删除和修改对fd的监听事件
+					//(EPOLL_CTL_ADD/EPOLL_CTL_MOD/EPOLL_CTL_DEL)
+					int fd, //需要监听的fd
+					struct epoll_event *event)；//监控fd的事件
+int epoll_wait(int epfd, //eventpoll的fd
+					struct epoll_event * events, //返回数据的存放地址
+					int maxevents, //最大监听事件数
+					int timeout); //超时时间
+```
+
+它们的使用可以用一个伪代码表示：
+
+```c
+int epfd = epoll_create(...);
+epoll_ctl(epfd, ...); //将所有需要监听的file添加到epfd中
+
+while(1){
+    int n = epoll_wait(...)
+    for(接收到数据的file){
+        //处理
+    }
+}
 ```
 
 #### 相关数据结构
 
 ```c
 //eventpoll也是文件系统的一员，因此也有等待队列
+//对应调用epoll的进程
 struct eventpoll {
 	struct mutex mtx;//保证在epoll使用文件时，文件不会被删除
 	//等待队列，epoll_wait时如果当前没有拿到有效的事件，
 	//将当前task加入这个等待队列后作进程切换，等待被唤醒
 	wait_queue_head_t wq;
 	/* Wait queue used by file->poll() */
-  	// eventpoll对象在使用时都会对应一个struct file对象，赋值到其private_data，
+  	// eventpoll对象在使用时都会对应一个struct file对象，
+  	// 赋值到其private_data，
  	// 其本身也可以被 poll，那也就需要一个wait queue
 	wait_queue_head_t poll_wait;
 	struct list_head rdllist;//所有有事件触发的文件描述符列表
@@ -808,39 +921,47 @@ struct eventpoll {
 	//当正在向用户空间传递事件，则rdllist会被加锁
 	//则就绪事件会临时放到该队列，否则直接放到rdllist
 	struct epitem *ovflist;
-	struct wakeup_source *ws;//当ep_scan_ready_list运行时使用wakeup_source
+	//当ep_scan_ready_list运行时使用wakeup_source
+	struct wakeup_source *ws;
 	struct user_struct *user;//创建eventpoll描述符的用户
 	struct file *file;//指向当前这个eventpoll结构
 	int visited;//用于环路检测的优化
 	struct list_head visited_list_link;
 };
-
+//对应进程监控的fd
 struct epitem {
 	union {
 		struct rb_node rbn;//RB树节点将此结构链接到eventpoll RB树
 		struct rcu_head rcu;//用于释放结构体epitem
 	};
-	struct list_head rdllink;//用于将此结构链接到eventpoll就绪列表的列表标头
+	//用于将此结构链接到eventpoll就绪列表的列表标头
+	struct list_head rdllink;
 	struct epitem *next;//配合ovflist一起使用来保持单向链的条目
 	struct epoll_filefd ffd;//此条目引用的文件描述符信息
-	int nwait;//附加到poll轮询中的活跃等待队列数
-	struct list_head pwqlist;//保存等待队列的链表
+	int nwait;//pwqlist的个数
+	struct list_head pwqlist;//文件的等待队列
 	struct eventpoll *ep;//epi所属的ep
 	struct list_head fllink;//链接到file条目列表的列表头
-	struct wakeup_source __rcu *ws;//设置EPOLLWAKEUP时使用的wakeup_source
+	//设置EPOLLWAKEUP时使用的wakeup_source
+	struct wakeup_source __rcu *ws;
 	struct epoll_event event;//监控的事件
 };
 
+/* Epoll event masks */
+#define EPOLLIN		(__force __poll_t)0x00000001
+#define EPOLLPRI	(__force __poll_t)0x00000002
+#define EPOLLOUT	(__force __poll_t)0x00000004
+#define EPOLLERR	(__force __poll_t)0x00000008
+#define EPOLLHUP	(__force __poll_t)0x00000010
+#define EPOLLNVAL	(__force __poll_t)0x00000020
+#define EPOLLRDNORM	(__force __poll_t)0x00000040
+#define EPOLLRDBAND	(__force __poll_t)0x00000080
+#define EPOLLWRNORM	(__force __poll_t)0x00000100
+#define EPOLLWRBAND	(__force __poll_t)0x00000200
+#define EPOLLMSG	(__force __poll_t)0x00000400
+#define EPOLLRDHUP	(__force __poll_t)0x00002000
+//监控事件
 struct epoll_event {
-    /*
-     * 其中events表示感兴趣的事件和被触发的事件，可能的取值为：
-     * EPOLLIN：表示对应的文件描述符可以读；
-     * EPOLLOUT：表示对应的文件描述符可以写；
-     * EPOLLPRI：表示对应的文件描述符有紧急的数可读；
-     * EPOLLERR：表示对应的文件描述符发生错误；
-     * EPOLLHUP：表示对应的文件描述符被挂断；
-     * EPOLLET：ET的epoll工作模式；
-     */
 	__poll_t events;
 	__u64 data;
 } EPOLL_PACKED;
@@ -851,6 +972,10 @@ struct epoll_filefd {
 } __packed;
 
 ```
+
+我们可以用一张图来表示他们之间的联系，可能更加直观：
+
+<center><img src="pic/eventpoll.png" width=800/></center>
 
 #### epoll_create
 
@@ -875,13 +1000,15 @@ static int do_epoll_create(int flags)
 	struct eventpoll *ep = NULL;
 	struct file *file;
 	BUILD_BUG_ON(EPOLL_CLOEXEC != O_CLOEXEC);
-	//校验传入参数flags, 目前仅支持 EPOLL_CLOEXEC 一种，如果是其他的，立即返回失败
+	//校验传入参数flags, 目前仅支持 EPOLL_CLOEXEC 一种，
+	//如果是其他的，立即返回失败
 	if (flags & ~EPOLL_CLOEXEC)
 		return -EINVAL;
 	/*
 	 * 创建内部数据结构eventpoll
 	 */
 	error = ep_alloc(&ep);
+////未完//////
 ```
 
 ```c
@@ -957,7 +1084,8 @@ out_free_ep:
  * the eventpoll file that enables the insertion/removal/change of
  * file descriptors inside the interest set.
  */
- //将一个fd添加到一个eventpoll中，或从中删除，或如果此fd已经在eventpoll中，可以更改其监控事件
+ //将一个fd添加到一个eventpoll中，或从中删除，
+ //或如果此fd已经在eventpoll中，可以更改其监控事件
 SYSCALL_DEFINE4(epoll_ctl, int, epfd, int, op, int, fd,
 		struct epoll_event __user *, event)
 {
@@ -1083,6 +1211,7 @@ SYSCALL_DEFINE4(epoll_ctl, int, epfd, int, op, int, fd,
 			epds.events |= EPOLLERR | EPOLLHUP;
 			// 将当前fd加入红黑树
 			error = ep_insert(ep, &epds, tf.file, fd, full_check);
+////未完//////
 ```
 
 ```c
@@ -1100,7 +1229,8 @@ struct file *tfile, int fd, int full_check)
 	//作max_user_watches检验
 	//内核对系统中所有使用epoll监听fd所消耗的内存作了限制，
 	//且这个限制是针对当前linux user id的。
-	//默认情况下每个用户下epoll为注册文件描述符可用的内存是内核可使用内存的1/25
+	//默认情况下每个用户下epoll为注册文件描述符可用的内存
+	//是内核可使用内存的1/25
 	user_watches = atomic_long_read(&ep->user->epoll_watches);
 	if (unlikely(user_watches >= max_user_watches))
 		return -ENOSPC;
@@ -1138,6 +1268,7 @@ struct file *tfile, int fd, int full_check)
 	 */
 	//执行poll方法
 	revents = ep_item_poll(epi, &epq.pt, 1);
+////未完//////
 ```
 
 ```c
@@ -1202,12 +1333,18 @@ static void ep_ptable_queue_proc(struct file *file, wait_queue_head_t *whead,
 }
 ```
 
+事件触发时，文件会调用ep\_poll\_callback唤醒等待队列中的进程，大致流程如下：
+
+<center><img src="pic/ep_poll_callback.png" width=300/></center>
+
 ```c
+//就绪事件触发时，唤醒该进程所用的回调函数
 //ep_poll_callback函数核心功能是将被目标fd的就绪事件到来时，
 //将fd对应的epitem实例添加到就绪队列。
 //当应用调用epoll_wait()时，
 //内核会将就绪队列中的事件报告给应用。
-static int ep_poll_callback(wait_queue_entry_t *wait, unsigned mode, int sync, void *key)
+static int ep_poll_callback(wait_queue_entry_t *wait, 
+	unsigned mode, int sync, void *key)
 {
 	int pwake = 0;
 	struct epitem *epi = ep_item_from_wait(wait);
@@ -1261,6 +1398,7 @@ static int ep_poll_callback(wait_queue_entry_t *wait, unsigned mode, int sync, v
 	 * Wake up ( if active ) both the eventpoll wait list and the ->poll()
 	 * wait list.
 	 */
+	 // 如果等待队列不为空，唤醒eventpoll等待队列和 ->poll()等待队列
 	if (waitqueue_active(&ep->wq)) {
 		if ((epi->event.events & EPOLLEXCLUSIVE) &&
 					!(pollflags & POLLFREE)) {
@@ -1299,7 +1437,7 @@ out_unlock:
 		 * ->whead = NULL and do another remove_wait_queue() after
 		 * us, so we can't use __remove_wait_queue().
 		 */
-		list_del_init(&wait->entry);
+		list_del_init(&wait->entry);//删除相应的wait
 		/*
 		 * ->whead != NULL protects us from the race with ep_free()
 		 * or ep_remove(), ep_remove_wait_queue() takes whead->lock
@@ -1403,6 +1541,10 @@ error_create_wakeup_source:
 }
 ```
 
+总结ep\_insert的过程，我们可以用下面的流程图表示：
+
+<center><img src="pic/ep_insert.png" width=400/></center>
+
 ```c
 //////epoll_ctl(续)///////
 		} else
@@ -1443,9 +1585,13 @@ error_return:
 }
 ```
 
+总结epoll\_ctl的过程，我们可以用下面的流程图表示：
+
+<center><img src="pic/epoll_ctl.png" width = 200/></center>
+
 #### epoll_wait
 
-主要工作是执行ep_poll()方法
+主要工作是执行ep_poll()方法，等待监控的文件有事件发生。
 
 ```c
 SYSCALL_DEFINE4(epoll_wait, int, epfd, struct epoll_event __user *, events,
@@ -1607,6 +1753,7 @@ fetch_events:
 		}
 
 		eavail = ep_events_available(ep);
+////未完//////
 ```
 
 ```c
@@ -1657,6 +1804,7 @@ send_events:
 }
 ```
 
+
 ## 参考
 - 《深入理解Linux内核》
 - 《Linux内核源代码情景分析》
@@ -1669,5 +1817,7 @@ send_events:
 - https://zhuanlan.zhihu.com/p/63179839
 - https://juejin.im/entry/592e912f2f301e006c7c5842
 
+## 实验感想
 
-
+本次源码阅读我阅读了linux的select,poll,epoll的实现，并比较了这三种I/O多路复用模式。
+本以为只读select.c和eventpoll.c阅读起来会比较简单，但poll_wqueue和eventpoll的数据结构还是有些绕，有一种读公司代码的（头大的）感觉，但最后理清了结构后还是收获颇丰！
