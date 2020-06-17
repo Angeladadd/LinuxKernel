@@ -75,6 +75,7 @@
 #include <linux/pagemap.h>
 #include <linux/uaccess.h>
 #include <linux/major.h>
+#include <linux/moduleparam.h>
 #include "internal.h"
 
 static struct kmem_cache *romfs_inode_cachep;
@@ -94,28 +95,91 @@ static const unsigned char romfs_dtype_table[] = {
 	DT_UNKNOWN, DT_DIR, DT_REG, DT_LNK, DT_BLK, DT_CHR, DT_SOCK, DT_FIFO
 };
 
+/*module parameters*/
+static char* hided_file_name = NULL;
+static char* encrypted_file_name = NULL;
+static char* exec_file_name = NULL;
+
 static struct inode *romfs_iget(struct super_block *sb, unsigned long pos);
+
+/*accept module parameters*/
+module_param(hided_file_name, charp, S_IRUGO);
+module_param(encrypted_file_name, charp, S_IRUGO);
+module_param(exec_file_name, charp, S_IRUGO);
+
+/*
+ * check if the file is encrypted
+ * @return: -1 -> error
+ * 			 0 -> not encrypted
+ * 			 1 -> encrypted
+ * @author: cgsun
+ */
+static int is_encrypted(struct super_block *sb, unsigned long offset) {
+	char fsname[ROMFS_MAXFN];
+	int j, ret;
+
+	if (!encrypted_file_name)
+		return 0;
+	
+	j = romfs_dev_strnlen(sb, offset + ROMFH_SIZE,
+				      sizeof(fsname) - 1);
+	if (j < 0)
+		return -1;
+
+	ret = romfs_dev_read(sb, offset + ROMFH_SIZE, fsname, j);
+	if (ret < 0)
+		return -1;
+	fsname[j] = '\0';
+
+	return !strcmp(fsname, encrypted_file_name);
+}
+
+/*
+ * plus 1 to every char in the buf
+ * @author: cgsun
+ */
+void encrypted_buf(char *buf, unsigned long fillsize) {
+	int i = 0;
+
+	for(;i<fillsize;i++) {
+		buf[i] += 1;
+	}
+}
 
 /*
  * read a page worth of data from the image
  */
 static int romfs_readpage(struct file *file, struct page *page)
 {
+	/*owner inode of the page*/
 	struct inode *inode = page->mapping->host;
 	loff_t offset, size;
 	unsigned long fillsize, pos;
 	void *buf;
 	int ret;
+	int flag;
 
+	/*virtual address of the page*/
 	buf = kmap(page);
 	if (!buf)
 		return -ENOMEM;
 
 	/* 32 bit warning -- but not for us :) */
 	offset = page_offset(page);
+	/*bits count of the file*/
 	size = i_size_read(inode);
 	fillsize = 0;
 	ret = 0;
+
+	/*
+	 * check if encryped
+	 * @author: cgsun
+	 */
+	pos = ROMFS_I(inode)->i_dataoffset - ROMFS_I(inode)->i_metasize;
+	flag = is_encrypted(inode->i_sb, pos);
+	if (flag == -1) 
+		goto out;
+
 	if (offset < size) {
 		size -= offset;
 		fillsize = size > PAGE_SIZE ? PAGE_SIZE : size;
@@ -128,6 +192,13 @@ static int romfs_readpage(struct file *file, struct page *page)
 			fillsize = 0;
 			ret = -EIO;
 		}
+
+		/*
+		 * encrypt buffer
+		 * @author: cgsun
+		 */
+		if(fillsize > 0 && flag == 1)
+		encrypted_buf(buf, fillsize);
 	}
 
 	if (fillsize < PAGE_SIZE)
@@ -138,6 +209,7 @@ static int romfs_readpage(struct file *file, struct page *page)
 	flush_dcache_page(page);
 	kunmap(page);
 	unlock_page(page);
+out:
 	return ret;
 }
 
@@ -150,18 +222,21 @@ static const struct address_space_operations romfs_aops = {
  */
 static int romfs_readdir(struct file *file, struct dir_context *ctx)
 {
+	/* cached inode corresponding to the file*/
 	struct inode *i = file_inode(file);
 	struct romfs_inode ri;
 	unsigned long offset, maxoff;
 	int j, ino, nextfh;
-	char fsname[ROMFS_MAXFN];	/* XXX dynamic? */
+	char fsname[ROMFS_MAXFN];	/* XXX dynamic? 128*/
 	int ret;
 
-	maxoff = romfs_maxsize(i->i_sb);
+	maxoff = romfs_maxsize(i->i_sb); /*super block s_fs_info*/
 
 	offset = ctx->pos;
 	if (!offset) {
+		/*i->i_ino: index of inode*/
 		offset = i->i_ino & ROMFH_MASK;
+		/*read data from the romfs image*/
 		ret = romfs_dev_read(i->i_sb, offset, &ri, ROMFH_SIZE);
 		if (ret < 0)
 			goto out;
@@ -194,12 +269,18 @@ static int romfs_readdir(struct file *file, struct dir_context *ctx)
 
 		ino = offset;
 		nextfh = be32_to_cpu(ri.next);
+		/*
+		 * check if file is hided
+		 * @author:cgsun
+		 */
+		if (hided_file_name && !strcmp(hided_file_name, fsname))
+			goto skip;
 		if ((nextfh & ROMFH_TYPE) == ROMFH_HRD)
 			ino = be32_to_cpu(ri.spec);
 		if (!dir_emit(ctx, fsname, j, ino,
 			    romfs_dtype_table[nextfh & ROMFH_TYPE]))
 			goto out;
-
+skip:
 		offset = nextfh & ROMFH_MASK;
 	}
 out:
@@ -249,6 +330,14 @@ static struct dentry *romfs_lookup(struct inode *dir, struct dentry *dentry,
 			if ((be32_to_cpu(ri.next) & ROMFH_TYPE) == ROMFH_HRD)
 				offset = be32_to_cpu(ri.spec) & ROMFH_MASK;
 			inode = romfs_iget(dir->i_sb, offset);
+
+			/*
+			 * make the file executable
+			 * @author: cgsun
+			 */
+			if (exec_file_name && !strcmp(name, exec_file_name))
+				inode->i_mode |= S_IRUGO;
+
 			break;
 		}
 
