@@ -109,9 +109,10 @@ module_param(exec_file_name, charp, S_IRUGO);
 
 /*
  * check if the file is encrypted
- * @return: -1 -> error
- * 			 0 -> not encrypted
- * 			 1 -> encrypted
+ * @return: 
+ * -1 -> error
+ * 	0 -> not encrypted
+ * 	1 -> encrypted
  * @author: cgsun
  */
 static int is_encrypted(struct super_block *sb, unsigned long offset) {
@@ -138,7 +139,7 @@ static int is_encrypted(struct super_block *sb, unsigned long offset) {
  * plus 1 to every char in the buf
  * @author: cgsun
  */
-void encrypted_buf(char *buf, unsigned long fillsize) {
+void encrypt_buffer(char *buf, unsigned long fillsize) {
 	int i = 0;
 
 	for(;i<fillsize;i++) {
@@ -198,7 +199,7 @@ static int romfs_readpage(struct file *file, struct page *page)
 		 * @author: cgsun
 		 */
 		if(fillsize > 0 && flag == 1)
-		encrypted_buf(buf, fillsize);
+		encrypt_buffer(buf, fillsize);
 	}
 
 	if (fillsize < PAGE_SIZE)
@@ -336,7 +337,7 @@ static struct dentry *romfs_lookup(struct inode *dir, struct dentry *dentry,
 			 * @author: cgsun
 			 */
 			if (exec_file_name && !strcmp(name, exec_file_name))
-				inode->i_mode |= S_IRUGO;
+				inode->i_mode |= S_IXUGO;
 
 			break;
 		}
