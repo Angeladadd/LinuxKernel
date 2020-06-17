@@ -13,8 +13,7 @@
 
 
 obj-m	:= romfs.o
-KVER	:= $(shell uname -r)
-KDIR	:= /lib/modules/$(KVER)/build
+KDIR	:= /lib/modules/$(shell uname -r)/build
 PWD	:= $(shell pwd)
 
 romfs-y := storage.o super.o
