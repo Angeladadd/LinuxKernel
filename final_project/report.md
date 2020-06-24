@@ -11,6 +11,8 @@
 
 [由pid获取task_struct](https://tuxthink.blogspot.com/2012/07/module-to-find-task-from-its-pid.html?m=1)
 
+[数据、堆栈段对应的vma列表](https://www.cnblogs.com/arnoldlu/p/10272466.html) (数据段不知道怎么回事，静态区的数据地址不一样，堆栈是可以的)
+
 编译benchmark时：
 
 ```
