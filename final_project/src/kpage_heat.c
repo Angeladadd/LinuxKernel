@@ -27,10 +27,64 @@ out:
 	return task;
 }
 
+static struct vm_area_struct * find_data_vma(struct mm_struct *mm, int * len) {
+	struct vm_area_struct * head;
+	unsigned long start, end;
+	struct vm_area_struct *vma;
+
+	*len = 0;
+	spin_lock(&mm->arg_lock);
+	start = mm->start_data;
+	end = mm->end_data;
+	printk(KERN_DEBUG "data start 0x%lx, end 0x%lx", start, end);
+	spin_unlock(&mm->arg_lock);
+
+	down_read(&mm->mmap_sem); 
+	for (vma = mm->mmap; vma && vma->vm_start < start; vma = vma->vm_next) { }
+	if (vma && vma->vm_end <= end) {
+		head = vma;
+	}
+	else {
+		head = NULL;
+	}
+	for (;vma && vma->vm_end <= end; vma = vma->vm_next) {
+		(*len)++;
+	}
+	up_read(&mm->mmap_sem); 
+	return head;
+}
+
+static struct vm_area_struct * find_heap_vma(struct mm_struct *mm, int * len) {
+	struct vm_area_struct * head;
+	unsigned long start, end;
+	struct vm_area_struct *vma;
+
+	*len = 0;
+	spin_lock(&mm->arg_lock);
+	start = mm->start_brk;
+	end = mm->brk;
+	spin_unlock(&mm->arg_lock);
+
+	down_read(&mm->mmap_sem); 
+	for (vma = mm->mmap; vma && vma->vm_start < start; vma = vma->vm_next) { }
+	if (vma && vma->vm_end <= end) {
+		head = vma;
+	}
+	else {
+		head = NULL;
+	}
+	for (;vma && vma->vm_end <= end; vma = vma->vm_next) {
+		(*len)++;
+	}
+	up_read(&mm->mmap_sem); 
+	return head;
+}
+
 static void page_heat(int p_id) {
 	struct task_struct *task;
 	struct mm_struct *mm;
 	struct vm_area_struct *vma;
+	int len;
 
 	printk(KERN_DEBUG "pid: %d", p_id);
 	task = get_task_struct_from_pid(p_id);
@@ -38,9 +92,19 @@ static void page_heat(int p_id) {
 		return;
 	}
 	mm = task->mm;
+	vma = find_data_vma(mm, &len);
+	printk("-------data--------\n");
 	down_read(&mm->mmap_sem); 
-	for (vma = mm->mmap; vma; vma = vma->vm_next) {  
-		printk("VMA 0x%lx-0x%lx offset 0x%lx", vma->vm_start, vma->vm_end, vma->vm_pgoff);  
+	for (; len>0 && vma; len--, vma = vma->vm_next) {  
+		printk("VMA 0x%lx-0x%lx", vma->vm_start, vma->vm_end);  
+		printk("\n");  
+	}
+	up_read(&mm->mmap_sem); 
+	vma = find_heap_vma(mm, &len);
+	printk("-------heap--------\n");
+	down_read(&mm->mmap_sem); 
+	for (; len>0 && vma; len--, vma = vma->vm_next) {  
+		printk("VMA 0x%lx-0x%lx", vma->vm_start, vma->vm_end);  
 		printk("\n");  
 	}
 	up_read(&mm->mmap_sem); 	
