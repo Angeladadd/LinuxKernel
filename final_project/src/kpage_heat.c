@@ -11,6 +11,67 @@
 
 static struct proc_dir_entry *entry = NULL;
 static int p_id = -1;
+static struct task_struct * task = NULL;
+static struct mm_struct *mm = NULL;
+
+struct page_heat {
+	unsigned long v_addr;
+	int heat;
+};
+
+static struct page_heat * page_heat_arr = NULL;
+static int page_heat_arr_capacity = 0;
+static int page_heat_arr_size = 0;
+
+static void print_heat(void) {
+	int i;
+	for (i=0;i<page_heat_arr_size;i++) {
+		printk("vaddr 0x%lx, heat %d \n", page_heat_arr[i].v_addr, page_heat_arr[i].heat);
+	}
+}
+
+static void append_heat(unsigned long vaddr) {
+	static struct page_heat * tmp = NULL;
+	int i;
+
+	if (page_heat_arr_capacity == 0) {
+		page_heat_arr_capacity = 1;
+		page_heat_arr = (struct page_heat *) kzalloc(page_heat_arr_capacity * sizeof(struct page_heat), GFP_KERNEL);
+	}
+	if (page_heat_arr_size == page_heat_arr_capacity) {
+		page_heat_arr_capacity <<= 1;
+		tmp = page_heat_arr;
+		page_heat_arr = (struct page_heat *)kzalloc(page_heat_arr_capacity * sizeof(struct page_heat), GFP_KERNEL);
+		for (i=0;i<page_heat_arr_size;i++) {
+			page_heat_arr[i] = tmp[i];
+		}
+		kfree(tmp);
+	} 
+	page_heat_arr[page_heat_arr_size].v_addr = vaddr;
+	page_heat_arr[page_heat_arr_size].heat = 1;
+	page_heat_arr_size++;
+	
+}
+static void free_heat(void) {
+	if (page_heat_arr)
+		kfree(page_heat_arr);
+}
+static struct page_heat * find_heat(unsigned long vaddr) {
+	int i;
+	for (i=0;i<page_heat_arr_size;i++) {
+		if (page_heat_arr[i].v_addr == vaddr) 
+			return &page_heat_arr[i];
+	}
+	return NULL;
+}
+static void update_heat(unsigned long vaddr) {
+	struct page_heat * heat = find_heat(vaddr);
+	if (heat) {
+		heat->heat++;
+	} else {
+		append_heat(vaddr);
+	}
+}
 
 static struct task_struct * get_task_struct_from_pid(int p_id) {
 	struct pid *pid_struct;
@@ -27,10 +88,27 @@ out:
 	return task;
 }
 
+static struct vm_area_struct * find_segment_vma(struct mm_struct *mm, int * len, unsigned long start, unsigned long end) {
+	struct vm_area_struct *head = NULL, *vma = NULL;
+	
+	down_read(&mm->mmap_sem); 
+	for (vma = mm->mmap; vma && vma->vm_start < start; vma = vma->vm_next) { }
+	if (vma && vma->vm_end <= end) {
+		head = vma;
+	}
+	else {
+		head = NULL;
+	}
+	for (;vma && vma->vm_end <= end; vma = vma->vm_next) {
+		(*len)++;
+	}
+	up_read(&mm->mmap_sem); 
+
+	return head;
+}
+
 static struct vm_area_struct * find_data_vma(struct mm_struct *mm, int * len) {
-	struct vm_area_struct * head;
 	unsigned long start, end;
-	struct vm_area_struct *vma;
 
 	*len = 0;
 	spin_lock(&mm->arg_lock);
@@ -39,50 +117,85 @@ static struct vm_area_struct * find_data_vma(struct mm_struct *mm, int * len) {
 	printk(KERN_DEBUG "data start 0x%lx, end 0x%lx", start, end);
 	spin_unlock(&mm->arg_lock);
 
-	down_read(&mm->mmap_sem); 
-	for (vma = mm->mmap; vma && vma->vm_start < start; vma = vma->vm_next) { }
-	if (vma && vma->vm_end <= end) {
-		head = vma;
-	}
-	else {
-		head = NULL;
-	}
-	for (;vma && vma->vm_end <= end; vma = vma->vm_next) {
-		(*len)++;
-	}
-	up_read(&mm->mmap_sem); 
-	return head;
+	return find_segment_vma(mm, len, start, end);
 }
 
 static struct vm_area_struct * find_heap_vma(struct mm_struct *mm, int * len) {
-	struct vm_area_struct * head;
 	unsigned long start, end;
-	struct vm_area_struct *vma;
 
 	*len = 0;
 	spin_lock(&mm->arg_lock);
 	start = mm->start_brk;
 	end = mm->brk;
+	printk(KERN_DEBUG "brk start 0x%lx, end 0x%lx", start, end);
 	spin_unlock(&mm->arg_lock);
 
+	return find_segment_vma(mm, len, start, end);
+}
+
+static pte_t * vaddr_to_pte(unsigned long addr) {
+	pgd_t * pgd = NULL;
+	p4d_t * p4d = NULL;
+	pud_t * pud = NULL;
+	pmd_t * pmd = NULL;
+	pte_t * pte = NULL;
+
+	if (!mm) goto rtn;
+
+	pgd = pgd_offset(mm, addr);
+	if (pgd_none(*pgd) || pgd_bad(*pgd)) {
+		printk("[mtest] pgd not present.\n");
+		goto rtn;
+	}
+	p4d = p4d_offset(pgd, addr);
+        if (p4d_none(*p4d) || p4d_bad(*p4d)) {
+		printk("[mtest] p4d not present.\n");
+		goto rtn;
+	}
+	pud = pud_offset(p4d, addr);
+        if (pud_none(*pud) || pud_bad(*pud)) {
+		printk("[mtest] pud not present.\n");
+		goto rtn;
+	}
+	pmd = pmd_offset(pud, addr);
+        if (pmd_none(*pmd) || pmd_bad(*pmd)) {
+		printk("[mtest] pmd not present.\n");
+		goto rtn;
+	}
+	pte = pte_offset_kernel(pmd, addr);
+	if (!pte_present(*pte)) {
+		printk("[mtest] pte not present.\n");
+		goto rtn;
+	}
+rtn:
+	return pte;
+}
+
+static void count_heat(unsigned long start, unsigned long end) {
+	unsigned long addr = start;
+	pte_t * pte;
+	while (addr + PAGE_SIZE < end) {
+		pte = vaddr_to_pte(addr);
+		if (pte && pte_young(*pte)) {
+			update_heat(addr);
+			pte_mkold(*pte);
+		}
+		addr += PAGE_SIZE;
+	}
+	print_heat();
+}
+
+static void print_vma(struct mm_struct * mm, struct vm_area_struct * vma, int len) {
 	down_read(&mm->mmap_sem); 
-	for (vma = mm->mmap; vma && vma->vm_start < start; vma = vma->vm_next) { }
-	if (vma && vma->vm_end <= end) {
-		head = vma;
-	}
-	else {
-		head = NULL;
-	}
-	for (;vma && vma->vm_end <= end; vma = vma->vm_next) {
-		(*len)++;
+	for (; len>0 && vma; len--, vma = vma->vm_next) {  
+		printk("VMA 0x%lx-0x%lx", vma->vm_start, vma->vm_end);  
+		printk("\n");  
+		count_heat(vma->vm_start, vma->vm_end);
 	}
 	up_read(&mm->mmap_sem); 
-	return head;
 }
 
 static void page_heat(int p_id) {
-	struct task_struct *task;
-	struct mm_struct *mm;
 	struct vm_area_struct *vma;
 	int len;
 
@@ -91,23 +204,16 @@ static void page_heat(int p_id) {
 	if (!task) {
 		return;
 	}
-	mm = task->mm;
-	vma = find_data_vma(mm, &len);
-	printk("-------data--------\n");
-	down_read(&mm->mmap_sem); 
-	for (; len>0 && vma; len--, vma = vma->vm_next) {  
-		printk("VMA 0x%lx-0x%lx", vma->vm_start, vma->vm_end);  
-		printk("\n");  
-	}
-	up_read(&mm->mmap_sem); 
-	vma = find_heap_vma(mm, &len);
-	printk("-------heap--------\n");
-	down_read(&mm->mmap_sem); 
-	for (; len>0 && vma; len--, vma = vma->vm_next) {  
-		printk("VMA 0x%lx-0x%lx", vma->vm_start, vma->vm_end);  
-		printk("\n");  
-	}
-	up_read(&mm->mmap_sem); 	
+	//while(1) {
+		mm = task->mm;
+		vma = find_data_vma(mm, &len);
+		printk("-------data--------\n");
+		print_vma(mm, vma, len);
+		vma = find_heap_vma(mm, &len);
+		printk("-------heap--------\n");
+		print_vma(mm, vma, len);
+	//}	
+	free_heat();
 }
 
 static ssize_t input_pid(struct file *file, const char __user *ubuf, size_t count, loff_t *ppos) {

@@ -25,7 +25,10 @@ int main() {
     }
 
     while(1) {
-        
+        for (int i=0;i<10;i++) {
+        printf("start addr %p value %d -> end addr %p\n", a[i], a[i][0], a[i+1]);
+        //p+=20;
+        }
     }
 
     return 0;
