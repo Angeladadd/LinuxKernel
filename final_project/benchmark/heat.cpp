@@ -6,6 +6,7 @@
 #include <math.h>
 #include <sys/time.h>
 #include <errno.h>
+#include <unistd.h>
 #include <sys/types.h>
 #include <hbwmalloc.h>
 
@@ -157,9 +158,13 @@ int main(int argc, char *argv[]){
 
   	heat();
 
-		pid_t pid, ppid;
-    pid = getpid();
-		system("echo %d > /proc/kpage_heat");
+	pid_t pid;
+    	pid = getpid();
+    	printf("pid %d\n", pid);
+	char* cmd = new char[80];
+	sprintf(cmd, "echo %d > /proc/kpage_heat", int(pid));
+	system(cmd);
+	delete cmd;
     
     return 0;
 }
