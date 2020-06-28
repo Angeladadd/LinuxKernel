@@ -9,7 +9,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 
-#define ARR_SIZE 40000
+#define ARR_SIZE 40
 
 int cnt = 0;
 int ** arrs = NULL;
