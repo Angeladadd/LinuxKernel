@@ -9,21 +9,25 @@
 #include <unistd.h>
 #include <stdlib.h>
 
-int cnt = 0;
-int * a = NULL;
+#define ARR_SIZE 40000
 
-void* visit_arr(void) {
-    while (1) {
-        printf("start addr %p -> end addr %p\n", a, a+10);
-        sleep(1);
-    }
+int cnt = 0;
+int ** arrs = NULL;
+
+void* visit_arr(int * arr) {
+    printf("start addr %p -> end addr %p\n", arr, arr+ARR_SIZE);
+    sleep(1);
 }
 
 int main() {
-    a  = (int *)malloc(10*sizeof(int));
+    arrs  = (int **)malloc(10*sizeof(int*));
     for (int i=0;i<10;i++) {
-        a[i] = cnt++;
+        arrs[i] = (int *)malloc(ARR_SIZE * sizeof(int*));
+        for (int j=0;j<ARR_SIZE;j++) {
+            arrs[i][j] = j;
+        }
+        visit_arr(arrs[i]);
     }
-    visit_arr();
+    while(1){}
     return 0;
 }
