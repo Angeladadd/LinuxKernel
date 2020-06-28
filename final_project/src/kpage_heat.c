@@ -8,6 +8,7 @@
 #include <asm/io.h>
 #include <linux/pid.h>
 #include <linux/pid_namespace.h>
+#include <linux/delay.h> 
 
 static struct proc_dir_entry *entry = NULL;
 static int p_id = -1;
@@ -201,13 +202,17 @@ static void count_heat(unsigned long start, unsigned long end) {
 
 
 static void print_vma(struct mm_struct * mm, struct vm_area_struct * vma, int len) {
+	int i;
 	down_read(&mm->mmap_sem); 
 	for (; len>0 && vma; len--, vma = vma->vm_next) {  
 		printk("VMA 0x%lx-0x%lx", vma->vm_start, vma->vm_end);  
 		printk("\n");  
-		count_heat(vma->vm_start, vma->vm_end);
 	}
 	up_read(&mm->mmap_sem); 
+	for(i=0;i<5;i++) {
+		count_heat(vma->vm_start, vma->vm_end);
+		msleep(10);
+	}
 }
 
 static void page_heat(int p_id) {
