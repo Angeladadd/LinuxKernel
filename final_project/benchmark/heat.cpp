@@ -6,6 +6,7 @@
 #include <math.h>
 #include <sys/time.h>
 #include <errno.h>
+#include <sys/types.h>
 #include <hbwmalloc.h>
 
 using namespace std;
@@ -155,6 +156,10 @@ int main(int argc, char *argv[]){
   	dtdysq = dt / (dy * dy);
 
   	heat();
+
+		pid_t pid, ppid;
+    pid = getpid();
+		system("echo %d > /proc/kpage_heat");
     
     return 0;
 }

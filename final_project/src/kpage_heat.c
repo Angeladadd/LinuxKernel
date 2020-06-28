@@ -11,8 +11,6 @@
 
 static struct proc_dir_entry *entry = NULL;
 static int p_id = -1;
-static struct task_struct * task = NULL;
-static struct mm_struct *mm = NULL;
 
 struct page_heat {
 	unsigned long v_addr;
@@ -23,6 +21,7 @@ static struct page_heat * page_heat_arr = NULL;
 static int page_heat_arr_capacity = 0;
 static int page_heat_arr_size = 0;
 
+/****used for page_heat****/
 static void print_heat(void) {
 	int i;
 	for (i=0;i<page_heat_arr_size;i++) {
@@ -55,6 +54,9 @@ static void append_heat(unsigned long vaddr) {
 static void free_heat(void) {
 	if (page_heat_arr)
 		kfree(page_heat_arr);
+	page_heat_arr_capacity = 0;
+	page_heat_arr_size = 0;
+	page_heat_arr = NULL;
 }
 static struct page_heat * find_heat(unsigned long vaddr) {
 	int i;
@@ -72,6 +74,9 @@ static void update_heat(unsigned long vaddr) {
 		append_heat(vaddr);
 	}
 }
+/*********/
+
+
 
 static struct task_struct * get_task_struct_from_pid(int p_id) {
 	struct pid *pid_struct;
@@ -88,6 +93,8 @@ out:
 	return task;
 }
 
+
+/*****find data/heap vma*****/
 static struct vm_area_struct * find_segment_vma(struct mm_struct *mm, int * len, unsigned long start, unsigned long end) {
 	struct vm_area_struct *head = NULL, *vma = NULL;
 	
@@ -132,39 +139,46 @@ static struct vm_area_struct * find_heap_vma(struct mm_struct *mm, int * len) {
 
 	return find_segment_vma(mm, len, start, end);
 }
+/**********/
 
+
+/*******get page heat*******/
 static pte_t * vaddr_to_pte(unsigned long addr) {
 	pgd_t * pgd = NULL;
 	p4d_t * p4d = NULL;
 	pud_t * pud = NULL;
 	pmd_t * pmd = NULL;
 	pte_t * pte = NULL;
+	struct task_struct * task = get_task_struct_from_pid(p_id);
+	struct mm_struct * mm = task->mm;
 
-	if (!mm) goto rtn;
+	if (!mm && !(mm=task->active_mm)) {
+		goto rtn;
+	}
 
 	pgd = pgd_offset(mm, addr);
 	if (pgd_none(*pgd) || pgd_bad(*pgd)) {
-		printk("[mtest] pgd not present.\n");
+		printk("vaddr 0x%lx pgd not present.\n", addr);
 		goto rtn;
 	}
 	p4d = p4d_offset(pgd, addr);
         if (p4d_none(*p4d) || p4d_bad(*p4d)) {
-		printk("[mtest] p4d not present.\n");
+		printk("vaddr 0x%lx p4d not present.\n", addr);
 		goto rtn;
 	}
 	pud = pud_offset(p4d, addr);
         if (pud_none(*pud) || pud_bad(*pud)) {
-		printk("[mtest] pud not present.\n");
+		printk("vaddr 0x%lx pud not present.\n", addr);
 		goto rtn;
 	}
 	pmd = pmd_offset(pud, addr);
         if (pmd_none(*pmd) || pmd_bad(*pmd)) {
-		printk("[mtest] pmd not present.\n");
+		printk("vaddr 0x%lx pmd not present.\n", addr);
 		goto rtn;
 	}
 	pte = pte_offset_kernel(pmd, addr);
 	if (!pte_present(*pte)) {
-		printk("[mtest] pte not present.\n");
+		printk("vaddr 0x%lx pte not present.\n", addr);
 		goto rtn;
 	}
 rtn:
@@ -174,7 +188,7 @@ rtn:
 static void count_heat(unsigned long start, unsigned long end) {
 	unsigned long addr = start;
 	pte_t * pte;
-	while (addr + PAGE_SIZE < end) {
+	while (addr <= end) {
 		pte = vaddr_to_pte(addr);
 		if (pte && pte_young(*pte)) {
 			update_heat(addr);
@@ -182,8 +196,9 @@ static void count_heat(unsigned long start, unsigned long end) {
 		}
 		addr += PAGE_SIZE;
 	}
-	print_heat();
 }
+/*************/
+
 
 static void print_vma(struct mm_struct * mm, struct vm_area_struct * vma, int len) {
 	down_read(&mm->mmap_sem); 
@@ -198,20 +213,39 @@ static void print_vma(struct mm_struct * mm, struct vm_area_struct * vma, int le
 static void page_heat(int p_id) {
 	struct vm_area_struct *vma;
 	int len;
+	struct task_struct * task = NULL;
+	struct mm_struct * mm = NULL;
 
 	printk(KERN_DEBUG "pid: %d", p_id);
 	task = get_task_struct_from_pid(p_id);
 	if (!task) {
 		return;
 	}
+	printk(KERN_DEBUG "find task\n");
 	//while(1) {
+		//user level thread
 		mm = task->mm;
-		vma = find_data_vma(mm, &len);
-		printk("-------data--------\n");
-		print_vma(mm, vma, len);
+		//kernel level thread?
+		if (!mm && !(mm = task->active_mm)) {
+			return;
+		}
+		
+		printk(KERN_DEBUG "get mm\n");
+
+		printk("part 3.1.1-------find vmas-------\n");
+		// vma = find_data_vma(mm, &len);
+		// printk("-------data--------\n");
+		// print_vma(mm, vma, len);
 		vma = find_heap_vma(mm, &len);
 		printk("-------heap--------\n");
 		print_vma(mm, vma, len);
+
+		printk("part 3.1.2-------find pages---------\n");
+		printk("total vma = %d\n", mm->total_vm);
+
+		printk("part 3.1.3-------print time&heat---------\n");
+		print_heat();
+
 	//}	
 	free_heat();
 }

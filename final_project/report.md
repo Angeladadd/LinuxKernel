@@ -68,3 +68,5 @@ Program terminated with signal SIGSEGV, Segmentation fault.
 ```
 
 【暂时暴躁】不想管了 无语了 实验指导看不懂想让我们干啥就算了连benchmark都core dump (不能挂.jpg
+
+自己写一个多线程，mm就会为空，原因是用了pthread会创建内核线程，而内核线程的mm=NULL
