@@ -178,7 +178,7 @@ static pte_t * vaddr_to_pte(unsigned long addr) {
 	}
 	pte = pte_offset_kernel(pmd, addr);
 	if (!pte_present(*pte)) {
-		printk("vaddr 0x%lx pte not present.\n", addr);
+//		printk("vaddr 0x%lx pte not present.\n", addr);
 		goto rtn;
 	}
 rtn:
@@ -245,7 +245,7 @@ static void page_heat(int p_id) {
 		printk("selected pages = %d\n", page_heat_arr_size);
 
 		printk("part 3.1.3-------print time&heat---------\n");
-		print_heat();
+//		print_heat();
 
 	//}	
 	free_heat();
