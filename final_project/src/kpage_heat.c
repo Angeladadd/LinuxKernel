@@ -229,7 +229,7 @@ static void page_heat(int p_id) {
 		if (!mm && !(mm = task->active_mm)) {
 			return;
 		}
-		
+
 		printk(KERN_DEBUG "get mm\n");
 
 		printk("part 3.1.1-------find vmas-------\n");

@@ -59,6 +59,8 @@ int heat() {
   	{
   		*(before + i) = (double *) malloc(ny * sizeof(double));
     	*(after + i) = (double *) malloc(ny * sizeof(double));
+			printf("before address start: %p\n", (before+i));
+			printf("after address start: %p\n", (after+i));
   	}
 
   	cout << "FINISH ALLOCTION *************************" << endl;
