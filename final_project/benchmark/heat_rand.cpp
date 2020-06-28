@@ -7,6 +7,8 @@
 #include <sys/time.h>
 #include <errno.h>
 #include <hbwmalloc.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 using namespace std;
 
@@ -151,6 +153,10 @@ int heat() {
   	printf("Elapsed time of Heat: %10.6f micro seconds\n\n", 
 		 (((finish.tv_sec * 1000000.0) + finish.tv_usec) -
 	  	((start.tv_sec * 1000000.0) + start.tv_usec)) / 1.0);
+
+		pid_t pid, ppid;
+    pid = getpid();
+		system("echo %d > /proc/kpage_heat");
 
     return 0;
 }
