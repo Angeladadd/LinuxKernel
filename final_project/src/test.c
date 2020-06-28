@@ -26,6 +26,9 @@ int main() {
         for (int j=0;j<ARR_SIZE;j++) {
             arrs[i][j] = j;
         }
+	if(i>0) {
+		free(arrs[i-1]);
+	}
         visit_arr(arrs[i]);
     }
     while(1){}

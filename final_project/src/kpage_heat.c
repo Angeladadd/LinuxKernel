@@ -241,7 +241,8 @@ static void page_heat(int p_id) {
 		print_vma(mm, vma, len);
 
 		printk("part 3.1.2-------find pages---------\n");
-		printk("total vma = %d\n", mm->total_vm);
+		printk("total pages = %d\n", mm->total_vm);
+		printk("selected pages = %d\n", page_heat_arr_size);
 
 		printk("part 3.1.3-------print time&heat---------\n");
 		print_heat();
