@@ -144,14 +144,12 @@ static struct vm_area_struct * find_heap_vma(struct mm_struct *mm, int * len) {
 
 
 /*******get page heat*******/
-static pte_t * vaddr_to_pte(unsigned long addr) {
+static pte_t * vaddr_to_pte(unsigned long addr, struct mm_struct * mm) {
 	pgd_t * pgd = NULL;
 	p4d_t * p4d = NULL;
 	pud_t * pud = NULL;
 	pmd_t * pmd = NULL;
 	pte_t * pte = NULL;
-	struct task_struct * task = get_task_struct_from_pid(p_id);
-	struct mm_struct * mm = task->mm;
 
 	if (!mm && !(mm=task->active_mm)) {
 		goto rtn;
@@ -186,14 +184,16 @@ rtn:
 	return pte;
 }
 
-static void count_heat(unsigned long start, unsigned long end) {
+static void count_heat(unsigned long start, unsigned long end, struct mm_struct * mm) {
 	unsigned long addr = start;
-	pte_t * pte;
+	pte_t * pte, pte_v;
 	while (addr <= end) {
-		pte = vaddr_to_pte(addr);
+		pte = vaddr_to_pte(addr, mm);
 		if (pte && pte_young(*pte)) {
 			update_heat(addr);
-			pte_mkold(*pte);
+			pte_v = *pte;
+			pte_mkold(pte_v);
+			set_pte_at(mm, addr, pte, pte_v);
 		}
 		addr += PAGE_SIZE;
 	}
@@ -210,8 +210,8 @@ static void print_vma(struct mm_struct * mm, struct vm_area_struct * vma, int le
 	}
 	up_read(&mm->mmap_sem); 
 	for(i=0;i<5;i++) {
-		count_heat(vma->vm_start, vma->vm_end);
-		msleep(10);
+		count_heat(vma->vm_start, vma->vm_end, mm);
+		msleep(1);
 	}
 }
 
@@ -224,14 +224,15 @@ static void page_heat(int p_id) {
 	printk(KERN_DEBUG "pid: %d", p_id);
 	task = get_task_struct_from_pid(p_id);
 	if (!task) {
+		printk(KERN_DEBUG "cannot find task from pid\n");
 		return;
 	}
-	printk(KERN_DEBUG "find task\n");
 	//while(1) {
 		//user level thread
 		mm = task->mm;
-		//kernel level thread?
+		//kernel level thread
 		if (!mm && !(mm = task->active_mm)) {
+			printk(KERN_DEBUG "cannot find mm\n");
 			return;
 		}
 
@@ -250,7 +251,7 @@ static void page_heat(int p_id) {
 		printk("selected pages = %d\n", page_heat_arr_size);
 
 		printk("part 3.1.3-------print time&heat---------\n");
-//		print_heat();
+		print_heat();
 
 	//}	
 	free_heat();
