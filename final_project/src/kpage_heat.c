@@ -23,7 +23,7 @@ static int hot_page_number[ITERATION_TIMES];
 static int max_hot_page_number = 0;
 
 struct page_heat {
-	unsigned long v_addr;
+	unsigned long long v_addr;
 	int heat;
 };
 
