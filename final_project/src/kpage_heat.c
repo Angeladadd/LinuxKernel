@@ -95,14 +95,6 @@ static void update_heat(unsigned long vaddr) {
 	}
 }
 
-static void init_arr(void) {
-	int i;
-	for (i=0;i<TOTAL_PAGE_NUMBER;i++) 
-		page_heat[i]=0;
-	for (i=0;i<ITERATION_TIMES;i++)
-		hot_page_number[i]=0;
-}
-
 static struct task_struct * get_task_struct_from_pid(int p_id) {
 	struct pid *pid_struct;
 	struct task_struct *task = NULL;
