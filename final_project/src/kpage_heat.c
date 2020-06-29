@@ -19,8 +19,8 @@
 
 static struct proc_dir_entry *entry = NULL;
 static int p_id = -1;
-long long page_heat[TOTAL_PAGE_NUMBER]{0};
-long long hot_page_number[ITERATION_TIMES]{0};
+static long long page_heat[TOTAL_PAGE_NUMBER]{0};
+static long long hot_page_number[ITERATION_TIMES]{0};
 
 static struct task_struct * get_task_struct_from_pid(int p_id) {
 	struct pid *pid_struct;
@@ -164,7 +164,7 @@ static void count_heat(struct mm_struct * mm, struct vm_area_struct * vma, int l
 /*************/
 
 
-void print_heat(void) {
+static void print_heat(void) {
 	int i;
 	int hn=0, mn=0, ln=0, zn=0;
 	for (i=0;i<TOTAL_PAGE_NUMBER;i++) {
