@@ -52,7 +52,7 @@ int heat() {
 	struct timeval start_1, finish_1;
 	double **before, **after;
 	int  c, l;
-
+	system(cmd);
 	before = (double **) malloc(nx * sizeof(double *));
   	after = (double **) malloc(nx * sizeof(double *));
 
@@ -64,7 +64,6 @@ int heat() {
   	}
 
   	cout << "FINISH ALLOCTION *************************" << endl;
-		system(cmd);
   	#pragma omp parallel for schedule(static, 64) 
   	for (int i = 0; i < nx; ++i) 
   	{
