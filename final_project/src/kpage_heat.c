@@ -10,17 +10,90 @@
 #include <linux/pid_namespace.h>
 #include <linux/delay.h> 
 
-
-#define TOTAL_PAGE_NUMBER 1000000
 #define ITERATION_TIMES 200
 #define HIGH (int)(ITERATION_TIMES * 0.8)
 #define MIDDLE (int)(ITERATION_TIMES * 0.4)
 #define LOW 1
+#define max(a, b) ((a)>(b)?(a):(b));
 
 static struct proc_dir_entry *entry = NULL;
 static int p_id = -1;
-static long long page_heat[TOTAL_PAGE_NUMBER];
-static long long hot_page_number[ITERATION_TIMES];
+static int hot_page_number[ITERATION_TIMES];
+static int max_hot_page_number = 0;
+
+struct page_heat {
+	unsigned long v_addr;
+	int heat;
+};
+
+static struct page_heat * page_heat_arr = NULL;
+static int page_heat_arr_capacity = 0;
+static int page_heat_arr_size = 0;
+
+static void print_heat(void) {
+	int i;
+	int hn=0, mn=0, ln=0, zn=0;
+	for (i=0;i<page_heat_arr_size;i++) {
+		// printk("vaddr 0x%lx, heat %d \n", page_heat_arr[i].v_addr, page_heat_arr[i].heat);
+		if (page_heat_arr[i].heat >= HIGH) {
+			hn++;
+		} else if (page_heat_arr[i].heat >= MIDDLE) {
+			mn++;
+		} else if (page_heat_arr[i].heat >= LOW) {
+			ln++;
+		} else {
+			zn++;
+		}
+	}
+	printk("--------page heat-------\n");
+	printk("HIGH %d\n", hn);
+	printk("MIDDLE %d\n", mn);
+	printk("LOW %d\n", ln);
+	printk("ZERO %d\n", zn);
+}
+
+static void append_heat(unsigned long vaddr) {
+	static struct page_heat * tmp = NULL;
+	int i;
+
+	if (page_heat_arr_capacity == 0) {
+		page_heat_arr_capacity = 1;
+		page_heat_arr = (struct page_heat *) kzalloc(page_heat_arr_capacity * sizeof(struct page_heat), GFP_KERNEL);
+	}
+	if (page_heat_arr_size == page_heat_arr_capacity) {
+		page_heat_arr_capacity <<= 1;
+		tmp = page_heat_arr;
+		page_heat_arr = (struct page_heat *)kzalloc(page_heat_arr_capacity * sizeof(struct page_heat), GFP_KERNEL);
+		for (i=0;i<page_heat_arr_size;i++) {
+			page_heat_arr[i] = tmp[i];
+		}
+		kfree(tmp);
+	} 
+	page_heat_arr[page_heat_arr_size].v_addr = vaddr;
+	page_heat_arr[page_heat_arr_size].heat = 1;
+	page_heat_arr_size++;
+	
+}
+static void free_heat(void) {
+	if (page_heat_arr)
+		kfree(page_heat_arr);
+}
+static struct page_heat * find_heat(unsigned long vaddr) {
+	int i;
+	for (i=0;i<page_heat_arr_size;i++) {
+		if (page_heat_arr[i].v_addr == vaddr) 
+			return &page_heat_arr[i];
+	}
+	return NULL;
+}
+static void update_heat(unsigned long vaddr) {
+	struct page_heat * heat = find_heat(vaddr);
+	if (heat) {
+		heat->heat++;
+	} else {
+		append_heat(vaddr);
+	}
+}
 
 static void init_arr(void) {
 	int i;
@@ -159,8 +232,7 @@ static void count_heat_core(unsigned long long start, unsigned long long end, st
 			set_pte_at(mm, addr, pte, pte_v);
 			printk("set\n");
 			pfn = pte_pfn(pte_v);
-			printk("pfn:0x%lx, d:%d\n",pfn, (int)pfn);
-			page_heat[(int)pfn]++;
+			update_heat(addr);
 			hot_page_number[it]++;
 		}
 		addr += PAGE_SIZE;
@@ -174,28 +246,6 @@ static void count_heat(struct mm_struct * mm, struct vm_area_struct * vma, int l
 	}
 }
 /*************/
-
-
-static void print_heat(void) {
-	int i;
-	int hn=0, mn=0, ln=0, zn=0;
-	for (i=0;i<TOTAL_PAGE_NUMBER;i++) {
-		if (page_heat[i] >= HIGH) {
-			hn++;
-		} else if (page_heat[i] >= MIDDLE) {
-			mn++;
-		} else if (page_heat[i] >= LOW) {
-			ln++;
-		} else {
-			zn++;
-		}
-	}
-	printk("--------page heat-------\n");
-	printk("HIGH %d\n", hn);
-	printk("MIDDLE %d\n", mn);
-	printk("LOW %d\n", ln);
-	printk("ZERO %d\n", zn);
-}
 
 static void heat(int p_id) {
 	struct vm_area_struct *vma;
@@ -230,13 +280,15 @@ static void heat(int p_id) {
 		down_read(&mm->mmap_sem); 
 		vma = find_heap_vma(mm, &len);
 
-		printk("part 3.1.2-------find pages---------\n");
-		printk("total pages = %d\n", mm->total_vm);
 		count_heat(mm, vma, len, it);
-		printk("selected pages = %d\n", hot_page_number[it]);
+		max_hot_page_number = max(max_hot_page_number, hot_page_number[it]);
 		up_read(&mm->mmap_sem); 
 		it++;
 	}
+	printk("part 3.1.2-------find pages---------\n");
+	printk("total pages = %d\n", (int)mm->total_vm);
+	printk("selected pages = %d\n", max_hot_page_number);
+
 	printk("part 3.1.3-------print time&heat---------\n");
 	print_heat();
 }
