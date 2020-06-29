@@ -142,8 +142,8 @@ rtn:
 	return pte;
 }
 
-static void count_heat_core(unsigned long start, unsigned long end, struct mm_struct * mm, int it) {
-	unsigned long addr = start;
+static void count_heat_core(unsigned long long start, unsigned long long end, struct mm_struct * mm, int it) {
+	unsigned long long addr = start;
 	pte_t * pte, pte_v;
 	struct page * page;
 	unsigned long long pfn;//page frame number
