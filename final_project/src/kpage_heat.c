@@ -35,21 +35,21 @@ static void print_heat(void) {
 	int hn=0, mn=0, ln=0, zn=0;
 	for (i=0;i<page_heat_arr_size;i++) {
 		// printk("vaddr 0x%lx, heat %d \n", page_heat_arr[i].v_addr, page_heat_arr[i].heat);
-		if (page_heat_arr[i].heat >= HIGH) {
+		if (page_heat_arr[i].heat >= MIDDLE) {
 			hn++;
-		} else if (page_heat_arr[i].heat >= MIDDLE) {
-			mn++;
 		} else if (page_heat_arr[i].heat >= LOW) {
-			ln++;
+			mn++;
+		// } else if (page_heat_arr[i].heat >= LOW) {
+		// 	ln++;
 		} else {
-			zn++;
+			ln++;
 		}
 	}
 	printk("--------page heat-------\n");
 	printk("HIGH %d\n", hn);
 	printk("MIDDLE %d\n", mn);
 	printk("LOW %d\n", ln);
-	printk("ZERO %d\n", zn);
+	// printk("ZERO %d\n", zn);
 }
 
 static void append_heat(unsigned long vaddr) {
@@ -183,25 +183,21 @@ static pte_t * vaddr_to_pte(unsigned long addr, struct mm_struct * mm) {
 		printk("vaddr 0x%lx pgd not present.\n", addr);
 		goto rtn;
 	}
-	printk("get pgd\n");
 	p4d = p4d_offset(pgd, addr);
         if (p4d_none(*p4d) || p4d_bad(*p4d)) {
 		printk("vaddr 0x%lx p4d not present.\n", addr);
 		goto rtn;
 	}
-	printk("get p4d\n");
 	pud = pud_offset(p4d, addr);
         if (pud_none(*pud) || pud_bad(*pud)) {
 		printk("vaddr 0x%lx pud not present.\n", addr);
 		goto rtn;
 	}
-	printk("get pud\n");
 	pmd = pmd_offset(pud, addr);
         if (pmd_none(*pmd) || pmd_bad(*pmd)) {
 		printk("vaddr 0x%lx pmd not present.\n", addr);
 		goto rtn;
 	}
-	printk("get pmd\n");
 	pte = pte_offset_kernel(pmd, addr);
 rtn:
 	return pte;
@@ -214,15 +210,11 @@ static void count_heat_core(unsigned long long start, unsigned long long end, st
 	unsigned long long pfn;//page frame number
 	printk("updating\n");
 	while (addr <= end) {
-		printk("addr 0x%xl\n", addr);
 		pte = vaddr_to_pte(addr, mm);
-		printk("get pte\n");
 		if (pte && pte_present(*pte) && pte_young(*pte)) {
-			printk("young\n");
 			pte_v = *pte;
 			pte_v = pte_mkold(pte_v);
 			set_pte_at(mm, addr, pte, pte_v);
-			printk("set\n");
 			pfn = pte_pfn(pte_v);
 			update_heat(addr);
 			hot_page_number[it]++;
