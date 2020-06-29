@@ -22,7 +22,7 @@ static int p_id = -1;
 static long long page_heat[TOTAL_PAGE_NUMBER];
 static long long hot_page_number[ITERATION_TIMES];
 
-static void init_arr() {
+static void init_arr(void) {
 	int i;
 	for (i=0;i<TOTAL_PAGE_NUMBER;i++) 
 		page_heat[i]=0;
