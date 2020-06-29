@@ -161,14 +161,15 @@ static struct vm_area_struct * find_data_vma(struct mm_struct *mm, int * len) {
 	return find_segment_vma(mm, len, start, end);
 }
 
-static struct vm_area_struct * find_heap_vma(struct mm_struct *mm, int * len) {
+static struct vm_area_struct * find_heap_vma(struct mm_struct *mm, int * len, bool print) {
 	unsigned long start, end;
 
 	*len = 0;
 	spin_lock(&mm->arg_lock);
 	start = mm->start_brk;
 	end = mm->brk;
-	printk(KERN_DEBUG "brk start 0x%lx, end 0x%lx", start, end);
+	if (print)
+		printk(KERN_DEBUG "brk start 0x%lx, end 0x%lx", start, end);
 	spin_unlock(&mm->arg_lock);
 
 	return find_segment_vma(mm, len, start, end);
@@ -262,16 +263,17 @@ static void heat(int p_id) {
 			printk(KERN_DEBUG "cannot find mm\n");
 			return;
 		}
+		if (i == 0) {
+			printk(KERN_DEBUG "get mm\n");
 
-		printk(KERN_DEBUG "get mm\n");
-
-		printk("part 3.1.1-------find vmas-------\n");
-		// vma = find_data_vma(mm, &len);
-		// printk("-------data--------\n");
-		// print_vma(mm, vma, len);
-		printk("-------heap--------\n");
+			printk("part 3.1.1-------find vmas-------\n");
+			// vma = find_data_vma(mm, &len);
+			// printk("-------data--------\n");
+			// print_vma(mm, vma, len);
+			printk("-------heap--------\n");
+		}
 		down_read(&mm->mmap_sem); 
-		vma = find_heap_vma(mm, &len);
+		vma = find_heap_vma(mm, &len, (i==0));
 
 		count_heat(mm, vma, len, it);
 		max_hot_page_number = max(max_hot_page_number, hot_page_number[it]);
