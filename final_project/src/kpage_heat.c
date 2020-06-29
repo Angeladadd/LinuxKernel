@@ -118,26 +118,26 @@ static pte_t * vaddr_to_pte(unsigned long addr, struct mm_struct * mm) {
 		printk("vaddr 0x%lx pgd not present.\n", addr);
 		goto rtn;
 	}
+	printk("get pgd\n");
 	p4d = p4d_offset(pgd, addr);
         if (p4d_none(*p4d) || p4d_bad(*p4d)) {
 		printk("vaddr 0x%lx p4d not present.\n", addr);
 		goto rtn;
 	}
+	printk("get p4d\n");
 	pud = pud_offset(p4d, addr);
         if (pud_none(*pud) || pud_bad(*pud)) {
 		printk("vaddr 0x%lx pud not present.\n", addr);
 		goto rtn;
 	}
+	printk("get pud\n");
 	pmd = pmd_offset(pud, addr);
         if (pmd_none(*pmd) || pmd_bad(*pmd)) {
 		printk("vaddr 0x%lx pmd not present.\n", addr);
 		goto rtn;
 	}
+	printk("get pmd\n");
 	pte = pte_offset_kernel(pmd, addr);
-	if (!pte_present(*pte)) {
-//		printk("vaddr 0x%lx pte not present.\n", addr);
-		goto rtn;
-	}
 rtn:
 	return pte;
 }
@@ -151,6 +151,7 @@ static void count_heat_core(unsigned long long start, unsigned long long end, st
 	while (addr <= end) {
 		printk("addr 0x%xl\n", addr);
 		pte = vaddr_to_pte(addr, mm);
+		printk("get pte\n");
 		if (pte && pte_present(*pte) && pte_young(*pte)) {
 			pte_v = *pte;
 			pte_mkold(pte_v);
