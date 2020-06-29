@@ -284,6 +284,12 @@ static void heat(int p_id) {
 
 	printk("part 3.1.3-------print time&heat---------\n");
 	print_heat();
+
+	//print pages
+	for(int i=0;i<ITERATION_TIMES;i++) {
+		printk("hot page number: %d\n", hot_page_number[i]);
+	}
+	free_heat();
 }
 
 static ssize_t input_pid(struct file *file, const char __user *ubuf, size_t count, loff_t *ppos) {
