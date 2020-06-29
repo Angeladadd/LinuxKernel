@@ -10,74 +10,17 @@
 #include <linux/pid_namespace.h>
 #include <linux/delay.h> 
 
+
+#define TOTAL_PAGE_NUMBER 1000000
+#define ITERATION_TIMES 200
+#define HIGH (int)(ITERATION_TIMES * 0.8)
+#define MIDDLE (int)(ITERATION_TIMES * 0.4)
+#define LOW 1
+
 static struct proc_dir_entry *entry = NULL;
 static int p_id = -1;
-
-struct page_heat {
-	unsigned long v_addr;
-	int heat;
-};
-
-static struct page_heat * page_heat_arr = NULL;
-static int page_heat_arr_capacity = 0;
-static int page_heat_arr_size = 0;
-
-/****used for page_heat****/
-static void print_heat(void) {
-	int i;
-	for (i=0;i<page_heat_arr_size;i++) {
-		printk("vaddr 0x%lx, heat %d \n", page_heat_arr[i].v_addr, page_heat_arr[i].heat);
-	}
-}
-
-static void append_heat(unsigned long vaddr) {
-	static struct page_heat * tmp = NULL;
-	int i;
-
-	if (page_heat_arr_capacity == 0) {
-		page_heat_arr_capacity = 1;
-		page_heat_arr = (struct page_heat *) kzalloc(page_heat_arr_capacity * sizeof(struct page_heat), GFP_KERNEL);
-	}
-	if (page_heat_arr_size == page_heat_arr_capacity) {
-		page_heat_arr_capacity <<= 1;
-		tmp = page_heat_arr;
-		page_heat_arr = (struct page_heat *)kzalloc(page_heat_arr_capacity * sizeof(struct page_heat), GFP_KERNEL);
-		for (i=0;i<page_heat_arr_size;i++) {
-			page_heat_arr[i] = tmp[i];
-		}
-		kfree(tmp);
-	} 
-	page_heat_arr[page_heat_arr_size].v_addr = vaddr;
-	page_heat_arr[page_heat_arr_size].heat = 1;
-	page_heat_arr_size++;
-	
-}
-static void free_heat(void) {
-	if (page_heat_arr)
-		kfree(page_heat_arr);
-	page_heat_arr_capacity = 0;
-	page_heat_arr_size = 0;
-	page_heat_arr = NULL;
-}
-static struct page_heat * find_heat(unsigned long vaddr) {
-	int i;
-	for (i=0;i<page_heat_arr_size;i++) {
-		if (page_heat_arr[i].v_addr == vaddr) 
-			return &page_heat_arr[i];
-	}
-	return NULL;
-}
-static void update_heat(unsigned long vaddr) {
-	struct page_heat * heat = find_heat(vaddr);
-	if (heat) {
-		heat->heat++;
-	} else {
-		append_heat(vaddr);
-	}
-}
-/*********/
-
-
+static unsigned long long page_heat[TOTAL_PAGE_NUMBER]{0};
+static unsigned long long hot_page_number[ITERATION_TIMES]{0};
 
 static struct task_struct * get_task_struct_from_pid(int p_id) {
 	struct pid *pid_struct;
@@ -96,6 +39,15 @@ out:
 
 
 /*****find data/heap vma*****/
+static void print_vma(struct mm_struct * mm, struct vm_area_struct * vma, int len) {
+	down_read(&mm->mmap_sem); 
+	for (; len>0 && vma; len--, vma = vma->vm_next) {  
+		printk("VMA 0x%lx-0x%lx", vma->vm_start, vma->vm_end);  
+		printk("\n");  
+	}
+	up_read(&mm->mmap_sem); 
+}
+
 static struct vm_area_struct * find_segment_vma(struct mm_struct *mm, int * len, unsigned long start, unsigned long end) {
 	struct vm_area_struct *head = NULL, *vma = NULL;
 	
@@ -111,6 +63,8 @@ static struct vm_area_struct * find_segment_vma(struct mm_struct *mm, int * len,
 		(*len)++;
 	}
 	up_read(&mm->mmap_sem); 
+
+	print_vma(mm, head, *len);
 
 	return head;
 }
@@ -151,10 +105,6 @@ static pte_t * vaddr_to_pte(unsigned long addr, struct mm_struct * mm) {
 	pmd_t * pmd = NULL;
 	pte_t * pte = NULL;
 
-	if (!mm && !(mm=task->active_mm)) {
-		goto rtn;
-	}
-
 	pgd = pgd_offset(mm, addr);
 	if (pgd_none(*pgd) || pgd_bad(*pgd)) {
 		printk("vaddr 0x%lx pgd not present.\n", addr);
@@ -184,35 +134,56 @@ rtn:
 	return pte;
 }
 
-static void count_heat(unsigned long start, unsigned long end, struct mm_struct * mm) {
+static void count_heat(unsigned long start, unsigned long end, struct mm_struct * mm, int it) {
 	unsigned long addr = start;
 	pte_t * pte, pte_v;
+	struct page * page;
+	unsigned long long pfn;//page frame number
+
 	while (addr <= end) {
 		pte = vaddr_to_pte(addr, mm);
-		if (pte && pte_young(*pte)) {
-			update_heat(addr);
+		if (pte && pte_present(pte) && pte_young(*pte)) {
 			pte_v = *pte;
 			pte_mkold(pte_v);
 			set_pte_at(mm, addr, pte, pte_v);
+			pfn = pte_pfn(pte_v);
+			page_heat[pfn]++;
+			hot_page_number[it]++;
 		}
 		addr += PAGE_SIZE;
 	}
+	*page_count = pg_count;
+}
+
+static void count_heat(struct mm_struct * mm, struct vm_area_struct * vma, int len, int it) {
+	down_read(&mm->mmap_sem); 
+	for (; len>0 && vma; len--, vma = vma->vm_next) {  
+		count_heat(vma->vm_start, vma->vm_end, mm, it);
+	}
+	up_read(&mm->mmap_sem); 
 }
 /*************/
 
 
-static void print_vma(struct mm_struct * mm, struct vm_area_struct * vma, int len) {
+void print_heat(void) {
 	int i;
-	down_read(&mm->mmap_sem); 
-	for (; len>0 && vma; len--, vma = vma->vm_next) {  
-		printk("VMA 0x%lx-0x%lx", vma->vm_start, vma->vm_end);  
-		printk("\n");  
+	int hn=0, mn=0, ln=0, zn=0;
+	for (i=0;i<TOTAL_PAGE_NUMBER;i++) {
+		if (page_heat[i] >= HIGH) {
+			hn++;
+		} else if (page_heat[i] >= MIDDLE) {
+			mn++;
+		} else if (page_heat[i] >= LOW) {
+			ln++;
+		} else {
+			zn++;
+		}
 	}
-	up_read(&mm->mmap_sem); 
-	for(i=0;i<5;i++) {
-		count_heat(vma->vm_start, vma->vm_end, mm);
-		msleep(1);
-	}
+	printk("--------page heat-------\n");
+	printk("HIGH %d\n", hn);
+	printk("MIDDLE %d\n", mn);
+	printk("LOW %d\n", ln);
+	printk("ZERO %d\n", zn);
 }
 
 static void page_heat(int p_id) {
@@ -220,6 +191,7 @@ static void page_heat(int p_id) {
 	int len;
 	struct task_struct * task = NULL;
 	struct mm_struct * mm = NULL;
+	int it = 0;
 
 	printk(KERN_DEBUG "pid: %d", p_id);
 	task = get_task_struct_from_pid(p_id);
@@ -227,7 +199,7 @@ static void page_heat(int p_id) {
 		printk(KERN_DEBUG "cannot find task from pid\n");
 		return;
 	}
-	//while(1) {
+	while(it<ITERATION_TIMES) {
 		//user level thread
 		mm = task->mm;
 		//kernel level thread
@@ -242,19 +214,17 @@ static void page_heat(int p_id) {
 		// vma = find_data_vma(mm, &len);
 		// printk("-------data--------\n");
 		// print_vma(mm, vma, len);
-		vma = find_heap_vma(mm, &len);
 		printk("-------heap--------\n");
-		print_vma(mm, vma, len);
+		vma = find_heap_vma(mm, &len);
 
 		printk("part 3.1.2-------find pages---------\n");
 		printk("total pages = %d\n", mm->total_vm);
-		printk("selected pages = %d\n", page_heat_arr_size);
-
-		printk("part 3.1.3-------print time&heat---------\n");
-		print_heat();
-
-	//}	
-	free_heat();
+		count_heat(mm, vma, len, it);
+		printk("selected pages = %d\n", hot_page_number[it]);
+		it++;
+	}
+	printk("part 3.1.3-------print time&heat---------\n");
+	print_heat();
 }
 
 static ssize_t input_pid(struct file *file, const char __user *ubuf, size_t count, loff_t *ppos) {
