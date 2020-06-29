@@ -19,8 +19,16 @@
 
 static struct proc_dir_entry *entry = NULL;
 static int p_id = -1;
-static long long page_heat[TOTAL_PAGE_NUMBER]{0};
-static long long hot_page_number[ITERATION_TIMES]{0};
+static long long page_heat[TOTAL_PAGE_NUMBER];
+static long long hot_page_number[ITERATION_TIMES];
+
+static void init_arr() {
+	int i;
+	for (i=0;i<TOTAL_PAGE_NUMBER;i++) 
+		page_heat[i]=0;
+	for (i=0;i<ITERATION_TIMES;i++)
+		hot_page_number[i]=0;
+}
 
 static struct task_struct * get_task_struct_from_pid(int p_id) {
 	struct pid *pid_struct;
@@ -192,6 +200,7 @@ static void page_heat(int p_id) {
 	struct mm_struct * mm = NULL;
 	int it = 0;
 
+	init_arr();
 	printk(KERN_DEBUG "pid: %d", p_id);
 	task = get_task_struct_from_pid(p_id);
 	if (!task) {
