@@ -193,7 +193,7 @@ static void print_heat(void) {
 	printk("ZERO %d\n", zn);
 }
 
-static void page_heat(int p_id) {
+static void heat(int p_id) {
 	struct vm_area_struct *vma;
 	int len;
 	struct task_struct * task = NULL;
@@ -244,7 +244,7 @@ static ssize_t input_pid(struct file *file, const char __user *ubuf, size_t coun
 		goto eout;
 
 	sscanf(buf, "%d", &p_id);
-	page_heat(p_id);
+	heat(p_id);
 	*ppos = strlen(buf);
 	kfree(buf);
 	return *ppos;
