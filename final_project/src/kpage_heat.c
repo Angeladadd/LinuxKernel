@@ -72,7 +72,7 @@ static struct vm_area_struct * find_segment_vma(struct mm_struct *mm, int * len,
 	}
 	// up_read(&mm->mmap_sem); 
 
-	print_vma(mm, head, *len);
+	// print_vma(mm, head, *len);
 
 	return head;
 }
