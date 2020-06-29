@@ -48,18 +48,18 @@ out:
 
 /*****find data/heap vma*****/
 static void print_vma(struct mm_struct * mm, struct vm_area_struct * vma, int len) {
-	down_read(&mm->mmap_sem); 
+	// down_read(&mm->mmap_sem); 
 	for (; len>0 && vma; len--, vma = vma->vm_next) {  
 		printk("VMA 0x%lx-0x%lx", vma->vm_start, vma->vm_end);  
 		printk("\n");  
 	}
-	up_read(&mm->mmap_sem); 
+	// up_read(&mm->mmap_sem); 
 }
 
 static struct vm_area_struct * find_segment_vma(struct mm_struct *mm, int * len, unsigned long start, unsigned long end) {
 	struct vm_area_struct *head = NULL, *vma = NULL;
 	
-	down_read(&mm->mmap_sem); 
+	// down_read(&mm->mmap_sem); 
 	for (vma = mm->mmap; vma && vma->vm_start < start; vma = vma->vm_next) { }
 	if (vma && vma->vm_end <= end) {
 		head = vma;
@@ -70,7 +70,7 @@ static struct vm_area_struct * find_segment_vma(struct mm_struct *mm, int * len,
 	for (;vma && vma->vm_end <= end; vma = vma->vm_next) {
 		(*len)++;
 	}
-	up_read(&mm->mmap_sem); 
+	// up_read(&mm->mmap_sem); 
 
 	print_vma(mm, head, *len);
 
@@ -147,8 +147,9 @@ static void count_heat_core(unsigned long long start, unsigned long long end, st
 	pte_t * pte, pte_v;
 	struct page * page;
 	unsigned long long pfn;//page frame number
-	printk("updateing\n");
+	printk("updating\n");
 	while (addr <= end) {
+		printk("addr %d\n", addr);
 		pte = vaddr_to_pte(addr, mm);
 		if (pte && pte_present(*pte) && pte_young(*pte)) {
 			pte_v = *pte;
@@ -163,12 +164,10 @@ static void count_heat_core(unsigned long long start, unsigned long long end, st
 }
 
 static void count_heat(struct mm_struct * mm, struct vm_area_struct * vma, int len, int it) {
-	down_read(&mm->mmap_sem); 
 	printk("counting heat...\n");
 	for (; len>0 && vma; len--, vma = vma->vm_next) {  
 		count_heat_core(vma->vm_start, vma->vm_end, mm, it);
 	}
-	up_read(&mm->mmap_sem); 
 }
 /*************/
 
@@ -224,12 +223,14 @@ static void heat(int p_id) {
 		// printk("-------data--------\n");
 		// print_vma(mm, vma, len);
 		printk("-------heap--------\n");
+		down_read(&mm->mmap_sem); 
 		vma = find_heap_vma(mm, &len);
 
 		printk("part 3.1.2-------find pages---------\n");
 		printk("total pages = %d\n", mm->total_vm);
 		count_heat(mm, vma, len, it);
 		printk("selected pages = %d\n", hot_page_number[it]);
+		up_read(&mm->mmap_sem); 
 		it++;
 	}
 	printk("part 3.1.3-------print time&heat---------\n");
