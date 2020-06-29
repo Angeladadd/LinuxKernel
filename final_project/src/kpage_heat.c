@@ -19,8 +19,8 @@
 
 static struct proc_dir_entry *entry = NULL;
 static int p_id = -1;
-static unsigned long long page_heat[TOTAL_PAGE_NUMBER]{0};
-static unsigned long long hot_page_number[ITERATION_TIMES]{0};
+long long page_heat[TOTAL_PAGE_NUMBER]{0};
+long long hot_page_number[ITERATION_TIMES]{0};
 
 static struct task_struct * get_task_struct_from_pid(int p_id) {
 	struct pid *pid_struct;
@@ -134,7 +134,7 @@ rtn:
 	return pte;
 }
 
-static void count_heat(unsigned long start, unsigned long end, struct mm_struct * mm, int it) {
+static void count_heat_core(unsigned long start, unsigned long end, struct mm_struct * mm, int it) {
 	unsigned long addr = start;
 	pte_t * pte, pte_v;
 	struct page * page;
@@ -142,23 +142,22 @@ static void count_heat(unsigned long start, unsigned long end, struct mm_struct 
 
 	while (addr <= end) {
 		pte = vaddr_to_pte(addr, mm);
-		if (pte && pte_present(pte) && pte_young(*pte)) {
+		if (pte && pte_present(*pte) && pte_young(*pte)) {
 			pte_v = *pte;
 			pte_mkold(pte_v);
 			set_pte_at(mm, addr, pte, pte_v);
 			pfn = pte_pfn(pte_v);
-			page_heat[pfn]++;
+			page_heat[(int)pfn]++;
 			hot_page_number[it]++;
 		}
 		addr += PAGE_SIZE;
 	}
-	*page_count = pg_count;
 }
 
 static void count_heat(struct mm_struct * mm, struct vm_area_struct * vma, int len, int it) {
 	down_read(&mm->mmap_sem); 
 	for (; len>0 && vma; len--, vma = vma->vm_next) {  
-		count_heat(vma->vm_start, vma->vm_end, mm, it);
+		count_heat_core(vma->vm_start, vma->vm_end, mm, it);
 	}
 	up_read(&mm->mmap_sem); 
 }
