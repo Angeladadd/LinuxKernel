@@ -147,7 +147,7 @@ static void count_heat_core(unsigned long start, unsigned long end, struct mm_st
 	pte_t * pte, pte_v;
 	struct page * page;
 	unsigned long long pfn;//page frame number
-
+	printk("updateing\n");
 	while (addr <= end) {
 		pte = vaddr_to_pte(addr, mm);
 		if (pte && pte_present(*pte) && pte_young(*pte)) {
@@ -164,6 +164,7 @@ static void count_heat_core(unsigned long start, unsigned long end, struct mm_st
 
 static void count_heat(struct mm_struct * mm, struct vm_area_struct * vma, int len, int it) {
 	down_read(&mm->mmap_sem); 
+	printk("counting heat...\n");
 	for (; len>0 && vma; len--, vma = vma->vm_next) {  
 		count_heat_core(vma->vm_start, vma->vm_end, mm, it);
 	}
