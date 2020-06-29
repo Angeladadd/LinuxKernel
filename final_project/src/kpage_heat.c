@@ -14,7 +14,8 @@
 #define HIGH (int)(ITERATION_TIMES * 0.8)
 #define MIDDLE (int)(ITERATION_TIMES * 0.4)
 #define LOW 1
-#define max(a, b) ((a)>(b)?(a):(b));
+#define max(a, b) ((a)>(b)?(a):(b))
+#define min(a, b) ((a)<(b)?(a):(b))
 
 static struct proc_dir_entry *entry = NULL;
 static int p_id = -1;
@@ -33,7 +34,10 @@ static int page_heat_arr_size = 0;
 static void print_heat(void) {
 	int i;
 	int hn=0, mn=0, ln=0, zn=0;
+	int max_heat = 0, min_heat = __INT_MAX__;
 	for (i=0;i<page_heat_arr_size;i++) {
+		max_heat = max(page_heat_arr[i].heat, max_heat);
+		min_heat = min(page_heat_arr[i].heat, min_heat);
 		// printk("vaddr 0x%lx, heat %d \n", page_heat_arr[i].v_addr, page_heat_arr[i].heat);
 		if (page_heat_arr[i].heat >= MIDDLE) {
 			hn++;
@@ -49,6 +53,8 @@ static void print_heat(void) {
 	printk("HIGH %d\n", hn);
 	printk("MIDDLE %d\n", mn);
 	printk("LOW %d\n", ln);
+	printk("MIN %d\n", min_heat);
+	printk("MAX %d\n", max_heat);
 	// printk("ZERO %d\n", zn);
 }
 
