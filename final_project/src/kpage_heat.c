@@ -149,7 +149,7 @@ static void count_heat_core(unsigned long long start, unsigned long long end, st
 	unsigned long long pfn;//page frame number
 	printk("updating\n");
 	while (addr <= end) {
-		printk("addr %d\n", addr);
+		printk("addr 0x%xl\n", addr);
 		pte = vaddr_to_pte(addr, mm);
 		if (pte && pte_present(*pte) && pte_young(*pte)) {
 			pte_v = *pte;
