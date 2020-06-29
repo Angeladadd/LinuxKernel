@@ -246,7 +246,6 @@ static void heat(int p_id) {
 	struct mm_struct * mm = NULL;
 	int it = 0;
 
-	init_arr();
 	printk(KERN_DEBUG "pid: %d", p_id);
 	task = get_task_struct_from_pid(p_id);
 	if (!task) {
