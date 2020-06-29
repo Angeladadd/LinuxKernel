@@ -246,7 +246,7 @@ static void heat(int p_id) {
 	int len;
 	struct task_struct * task = NULL;
 	struct mm_struct * mm = NULL;
-	int it = 0;
+	int it = 0, i=0;
 
 	printk(KERN_DEBUG "pid: %d", p_id);
 	task = get_task_struct_from_pid(p_id);
@@ -286,7 +286,7 @@ static void heat(int p_id) {
 	print_heat();
 
 	//print pages
-	for(int i=0;i<ITERATION_TIMES;i++) {
+	for(i=0;i<ITERATION_TIMES;i++) {
 		printk("hot page number: %d\n", hot_page_number[i]);
 	}
 	free_heat();
