@@ -225,7 +225,6 @@ static void count_heat_core(unsigned long long start, unsigned long long end, st
 			pte_v = *pte;
 			pte_v = pte_mkold(pte_v);
 			set_pte_at(mm, addr, pte, pte_v);
-			pfn = pte_pfn(pte_v);
 			update_heat(addr);
 			hot_page_number[it]++;
 		}
