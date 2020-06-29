@@ -27,19 +27,11 @@ int main() {
         for (int j=0;j<ARR_SIZE;j++) {
             arrs[i][j] = j;
         }
-	if(i>0) {
-		free(arrs[i-1]);
-	}
-        visit_arr(arrs[i]);
+	while (1) {
+        for (int i=0;i<10;i++) {
+            visit_arr(arrs[i]);
+        }
     }
-    pid_t pid;
-    	pid = getpid();
-    	printf("pid %d\n", pid);
-	char* cmd = (char*)malloc(80*sizeof(char));
-	sprintf(cmd, "echo %d > /proc/kpage_heat", (int)pid);
-	system(cmd);
-	free(cmd);
-    free(arrs[9]);
     //while(1){}
     return 0;
 }
