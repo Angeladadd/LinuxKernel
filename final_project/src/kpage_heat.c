@@ -153,10 +153,13 @@ static void count_heat_core(unsigned long long start, unsigned long long end, st
 		pte = vaddr_to_pte(addr, mm);
 		printk("get pte\n");
 		if (pte && pte_present(*pte) && pte_young(*pte)) {
+			printk("young\n");
 			pte_v = *pte;
-			pte_mkold(pte_v);
+			pte_v = pte_mkold(pte_v);
 			set_pte_at(mm, addr, pte, pte_v);
+			printk("set\n");
 			pfn = pte_pfn(pte_v);
+			printk("pfn\n");
 			page_heat[(int)pfn]++;
 			hot_page_number[it]++;
 		}
