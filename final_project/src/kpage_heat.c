@@ -159,7 +159,7 @@ static void count_heat_core(unsigned long long start, unsigned long long end, st
 			set_pte_at(mm, addr, pte, pte_v);
 			printk("set\n");
 			pfn = pte_pfn(pte_v);
-			printk("pfn\n");
+			printk("pfn:0x%lx, d:%d\n",pfn, (int)pfn);
 			page_heat[(int)pfn]++;
 			hot_page_number[it]++;
 		}
