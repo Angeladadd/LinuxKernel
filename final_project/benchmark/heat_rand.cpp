@@ -52,7 +52,6 @@ int heat() {
 	struct timeval start_1, finish_1;
 	double **before, **after;
 	int  c, l;
-	system(cmd);
 	before = (double **) malloc(nx * sizeof(double *));
   	after = (double **) malloc(nx * sizeof(double *));
 
@@ -184,7 +183,7 @@ int main(int argc, char *argv[]){
     printf("pid %d\n", pid);
 		cmd = new char[80];
 		sprintf(cmd, "echo %d > /proc/kpage_heat", int(pid));
-
+		system(cmd);
   	heat();
 		delete cmd;
 
