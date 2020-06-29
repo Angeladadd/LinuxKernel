@@ -37,6 +37,8 @@ double dx, dy, dt;
 double dtdxsq, dtdysq;
 double t;
 
+char * cmd;
+
 int leafmaxcol;
 
 void swap_ranks(double ***from_ranks, double ***to_ranks) {
@@ -62,7 +64,7 @@ int heat() {
   	}
 
   	cout << "FINISH ALLOCTION *************************" << endl;
-
+		system(cmd);
   	#pragma omp parallel for schedule(static, 64) 
   	for (int i = 0; i < nx; ++i) 
   	{
@@ -100,6 +102,7 @@ int heat() {
   		#pragma omp parallel for schedule(static, 64)
 	    for (int t = 0; t < nx; ++t)
 	    {
+				
 			int i, a, b, llb, lub;
 
 			int tmp = t / 64;
@@ -154,10 +157,6 @@ int heat() {
 		 (((finish.tv_sec * 1000000.0) + finish.tv_usec) -
 	  	((start.tv_sec * 1000000.0) + start.tv_usec)) / 1.0);
 
-		pid_t pid, ppid;
-    pid = getpid();
-		system("echo %d > /proc/kpage_heat");
-
     return 0;
 }
 
@@ -181,16 +180,15 @@ int main(int argc, char *argv[]){
   	dtdxsq = dt / (dx * dx);
   	dtdysq = dt / (dy * dy);
 
-  	heat();
-    
 		pid_t pid;
-    	pid = getpid();
-    	printf("pid %d\n", pid);
-	char* cmd = new char[80];
-	sprintf(cmd, "echo %d > /proc/kpage_heat", int(pid));
-	system(cmd);
-	delete cmd;
-	
+    pid = getpid();
+    printf("pid %d\n", pid);
+		cmd = new char[80];
+		sprintf(cmd, "echo %d > /proc/kpage_heat", int(pid));
+
+  	heat();
+		delete cmd;
+
     return 0;
 }
 
