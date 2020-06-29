@@ -195,7 +195,6 @@ static void count_heat_core(unsigned long long start, unsigned long long end, st
 	p4d_t * p4d = NULL;
 	pud_t * pud = NULL;
 	pmd_t * pmd = NULL;
-	pte_t * pte = NULL;
 	spinlock_t *ptl;
 
 	printk("updating\n");
