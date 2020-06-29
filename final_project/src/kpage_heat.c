@@ -184,39 +184,43 @@ static pte_t * vaddr_to_pte(unsigned long addr, struct mm_struct * mm) {
 	pmd_t * pmd = NULL;
 	pte_t * pte = NULL;
 
-	pgd = pgd_offset(mm, addr);
-	if (pgd_none(*pgd) || pgd_bad(*pgd)) {
-		printk("vaddr 0x%lx pgd not present.\n", addr);
-		goto rtn;
-	}
-	p4d = p4d_offset(pgd, addr);
-        if (p4d_none(*p4d) || p4d_bad(*p4d)) {
-		printk("vaddr 0x%lx p4d not present.\n", addr);
-		goto rtn;
-	}
-	pud = pud_offset(p4d, addr);
-        if (pud_none(*pud) || pud_bad(*pud)) {
-		printk("vaddr 0x%lx pud not present.\n", addr);
-		goto rtn;
-	}
-	pmd = pmd_offset(pud, addr);
-        if (pmd_none(*pmd) || pmd_bad(*pmd)) {
-		printk("vaddr 0x%lx pmd not present.\n", addr);
-		goto rtn;
-	}
-	pte = pte_offset_kernel(pmd, addr);
-rtn:
-	return pte;
 }
 
 static void count_heat_core(unsigned long long start, unsigned long long end, struct mm_struct * mm, int it) {
 	unsigned long long addr = start;
 	pte_t * pte, pte_v;
-	struct page * page;
-	unsigned long long pfn;//page frame number
+	// struct page * page;
+	// unsigned long long pfn;//page frame number
+	pgd_t * pgd = NULL;
+	p4d_t * p4d = NULL;
+	pud_t * pud = NULL;
+	pmd_t * pmd = NULL;
+	pte_t * pte = NULL;
+	spinlock_t *ptl;
+
 	printk("updating\n");
 	while (addr <= end) {
-		pte = vaddr_to_pte(addr, mm);
+		pgd = pgd_offset(mm, addr);
+		if (pgd_none(*pgd) || pgd_bad(*pgd)) {
+			printk("vaddr 0x%lx pgd not present.\n", addr);
+			goto next;
+		}
+		p4d = p4d_offset(pgd, addr);
+        if (p4d_none(*p4d) || p4d_bad(*p4d)) {
+			printk("vaddr 0x%lx p4d not present.\n", addr);
+			goto next;
+		}
+		pud = pud_offset(p4d, addr);
+        if (pud_none(*pud) || pud_bad(*pud)) {
+			printk("vaddr 0x%lx pud not present.\n", addr);
+			goto next;
+		}	
+		pmd = pmd_offset(pud, addr);
+        if (pmd_none(*pmd) || pmd_bad(*pmd)) {
+			printk("vaddr 0x%lx pmd not present.\n", addr);
+			goto next;
+		}
+		pte = pte_offset_map_lock(mm, pmd, addr, &ptl);
 		if (pte && pte_present(*pte) && pte_young(*pte)) {
 			pte_v = *pte;
 			pte_v = pte_mkold(pte_v);
@@ -225,6 +229,8 @@ static void count_heat_core(unsigned long long start, unsigned long long end, st
 			update_heat(addr);
 			hot_page_number[it]++;
 		}
+		pte_unmap_unlock(pte, ptl);
+next:
 		addr += PAGE_SIZE;
 	}
 }
