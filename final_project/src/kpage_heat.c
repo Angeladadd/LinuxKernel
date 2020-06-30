@@ -318,7 +318,7 @@ static struct file_operations my_ops = {
 	.write = input_pid,
 };
 
-static void time_handler(unsigned long data)
+static void time_handler(struct timer_list *t)
 { 
 	//int win=0;
     mod_timer(&stimer, jiffies + TIME_INTERVAL*HZ);
@@ -329,9 +329,9 @@ static void time_handler(unsigned long data)
 
 static int __init my_proc_init(void) {
 	entry = proc_create("kpage_heat", 0660, NULL, &my_ops);
-	init_timer(&stimer);
-    setup_timer(stimer, time_handler, 0);
-    add_timer(&stimer);
+	//init_timer(&stimer);
+    timer_setup(stimer, time_handler, 0);
+    //add_timer(&stimer);
 	return entry?0:-1;
 }
 
