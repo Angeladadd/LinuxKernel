@@ -292,7 +292,7 @@ static ssize_t input_pid(struct file *file, const char __user *ubuf, size_t coun
 		goto eout;
 	sscanf(buf, "%d", &p_id);
 	printk("input pid: %d\n", p_id);
-	heat(p_id);
+	//heat(p_id);
 	*ppos = strlen(buf);
 	kfree(buf);
 	return *ppos;
