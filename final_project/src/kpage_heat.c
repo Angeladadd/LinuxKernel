@@ -31,10 +31,6 @@ static struct page_heat * page_heat_arr = NULL;
 static int page_heat_arr_capacity = 0;
 static int page_heat_arr_size = 0;
 
-static int my_get_pid(void) {
-	return p_id;
-}
-
 static void print_heat(void) {
 	int i;
 	int max_heat = 0, min_heat = __INT_MAX__;
@@ -239,7 +235,7 @@ static void count_heat(struct mm_struct * mm, struct vm_area_struct * vma, int l
 }
 /*************/
 
-static void heat(int p_id) {
+static void heat() {
 	struct vm_area_struct *vma;
 	int len;
 	struct task_struct * task = NULL;
@@ -322,7 +318,7 @@ static void time_handler(struct timer_list *t)
 { 
 	//printk("timer\n");
     mod_timer(&stimer, jiffies + TIME_INTERVAL*HZ);
-    heat(my_get_pid()); 
+    heat(); 
 }
 
 static int __init my_proc_init(void) {
