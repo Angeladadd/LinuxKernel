@@ -257,12 +257,13 @@ static void heat(int p_id) {
 
 	last_p_id = p_id;
 
-	printk(KERN_DEBUG "pid: %d", p_id);
+	printk("pid: %d", p_id);
 	task = get_task_struct_from_pid(p_id);
 	if (!task) {
-		printk(KERN_DEBUG "cannot find task from pid\n");
+		printk("cannot find task from pid\n");
 		p_id = -1;
 		last_p_id = -1;
+		printk("pid %d", p_id);
 		return;
 	}
 	mm = task->mm;
