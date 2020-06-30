@@ -305,7 +305,7 @@ static ssize_t input_pid(struct file *file, const char __user *ubuf, size_t coun
 
 	sscanf(buf, "%d", &p_id);
 	printk("input pid: %d\n", p_id);
-	//heat(p_id);
+	heat(p_id);
 	*ppos = strlen(buf);
 	kfree(buf);
 	return *ppos;
@@ -322,9 +322,9 @@ static struct file_operations my_ops = {
 static void time_handler(struct timer_list *t)
 { 
 	//int win=0;
+	printk("timer\n");
     mod_timer(&stimer, jiffies + TIME_INTERVAL*HZ);
     heat(p_id); /* 1 is win.*/
-	printk("timer\n");
 	 /* we get no page, maybe something wrong occurs.*/
     //printk("sysmon: fail in scanning page table...\n");
 }
