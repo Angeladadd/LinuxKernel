@@ -31,7 +31,7 @@ static struct page_heat * page_heat_arr = NULL;
 static int page_heat_arr_capacity = 0;
 static int page_heat_arr_size = 0;
 
-static int get_pid(void) {
+static int my_get_pid(void) {
 	return p_id;
 }
 
@@ -321,7 +321,7 @@ static void time_handler(struct timer_list *t)
 { 
 	//printk("timer\n");
     mod_timer(&stimer, jiffies + TIME_INTERVAL*HZ);
-    heat(get_pid()); 
+    heat(my_get_pid()); 
 }
 
 static int __init my_proc_init(void) {
