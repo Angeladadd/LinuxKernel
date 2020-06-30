@@ -12,7 +12,7 @@
 #include <linux/ktime.h> 
 #include <linux/timer.h>
 
-#define TIME_INTERVAL 5
+#define TIME_INTERVAL 1
 #define HEAT_MAX 200
 
 static struct proc_dir_entry *entry = NULL;
@@ -30,6 +30,10 @@ struct page_heat {
 static struct page_heat * page_heat_arr = NULL;
 static int page_heat_arr_capacity = 0;
 static int page_heat_arr_size = 0;
+
+static int get_pid(void) {
+	return p_id;
+}
 
 static void print_heat(void) {
 	int i;
@@ -110,7 +114,7 @@ static struct task_struct * get_task_struct_from_pid(int p_id) {
 	struct task_struct *task = NULL;
 	pid_struct = find_get_pid(p_id);
 	if (!pid_struct) {
-		printk(KERN_DEBUG "pid not found\n");
+		printk("pid not found\n");
 		goto out;
 	}
 	task = pid_task(pid_struct, PIDTYPE_PID);
@@ -157,7 +161,7 @@ static struct vm_area_struct * find_data_vma(struct mm_struct *mm, int * len) {
 	spin_lock(&mm->arg_lock);
 	start = mm->start_data;
 	end = mm->end_data;
-	printk(KERN_DEBUG "data start 0x%lx, end 0x%lx", start, end);
+	printk("data start 0x%lx, end 0x%lx", start, end);
 	spin_unlock(&mm->arg_lock);
 
 	return find_segment_vma(mm, len, start, end);
@@ -172,7 +176,7 @@ static struct vm_area_struct * find_heap_vma(struct mm_struct *mm, int * len) {
 	start = mm->start_brk;
 	end = mm->brk;
 	//if (print)
-	printk(KERN_DEBUG "brk start 0x%lx, end 0x%lx", start, end);
+	printk("brk start 0x%lx, end 0x%lx", start, end);
 	spin_unlock(&mm->arg_lock);
 
 	return find_segment_vma(mm, len, start, end);
@@ -246,7 +250,7 @@ static void heat(int p_id) {
 	start = ktime_to_timeval(ktime_get());
 	hot_page_number = 0;
 	if(p_id == -1) {
-		printk(KERN_DEBUG "no pid\n");
+		printk("no pid\n");
 		return;
 	}
 
@@ -269,7 +273,7 @@ static void heat(int p_id) {
 	mm = task->mm;
 	//kernel level thread
 	if (!mm && !(mm = task->active_mm)) {
-		printk(KERN_DEBUG "cannot find mm\n");
+		printk("cannot find mm\n");
 		return;
 	}
 
@@ -317,7 +321,7 @@ static void time_handler(struct timer_list *t)
 { 
 	//printk("timer\n");
     mod_timer(&stimer, jiffies + TIME_INTERVAL*HZ);
-    heat(p_id); 
+    heat(get_pid()); 
 }
 
 static int __init my_proc_init(void) {
