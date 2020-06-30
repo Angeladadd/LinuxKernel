@@ -56,7 +56,7 @@ static void print_heat(void) {
 
 	size = min(max_heat, HEAT_MAX);
 
-	for (i=0;i<size;i++) {
+	for (i=0;i<=size;i++) {
 		printk("HEAT %d PAGE %d\n", i, heat_arr[i]);
 	}
 }
