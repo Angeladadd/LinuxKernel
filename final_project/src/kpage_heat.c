@@ -235,7 +235,7 @@ static void count_heat(struct mm_struct * mm, struct vm_area_struct * vma, int l
 }
 /*************/
 
-static void heat() {
+static void heat(void) {
 	struct vm_area_struct *vma;
 	int len;
 	struct task_struct * task = NULL;
