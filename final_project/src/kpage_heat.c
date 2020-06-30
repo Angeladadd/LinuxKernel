@@ -112,8 +112,6 @@ static struct task_struct * get_task_struct_from_pid(int p_id) {
 		goto out;
 	}
 	task = pid_task(pid_struct, PIDTYPE_PID);
-	if (!task)
-		printk(KERN_DEBUG "task not found\n");
 out:
 	return task;
 }
