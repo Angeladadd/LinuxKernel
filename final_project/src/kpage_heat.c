@@ -14,6 +14,7 @@
 
 #define ITERATION_TIMES 200
 #define TIME_INTERVAL 5
+#define TIMES 200
 #define HIGH ((int)(ITERATION_TIMES * 0.8))
 #define MIDDLE ((int)(ITERATION_TIMES * 0.4))
 #define LOW 1
@@ -253,6 +254,7 @@ static void heat(int p_id) {
 	task = get_task_struct_from_pid(p_id);
 	if (!task) {
 		printk(KERN_DEBUG "cannot find task from pid\n");
+		p_id = -1;
 		return;
 	}
 	while(it<ITERATION_TIMES) {
@@ -297,6 +299,7 @@ static void heat(int p_id) {
 
 static ssize_t input_pid(struct file *file, const char __user *ubuf, size_t count, loff_t *ppos) {
 	char *buf = NULL;
+	int times = 0;
 	if (*ppos > 0) 
 		goto eout;
 	buf = (char*) kzalloc(sizeof(char) * count, GFP_KERNEL);
@@ -305,7 +308,11 @@ static ssize_t input_pid(struct file *file, const char __user *ubuf, size_t coun
 
 	sscanf(buf, "%d", &p_id);
 	printk("input pid: %d\n", p_id);
-	heat(p_id);
+	while(times < TIMES) {
+		heat(p_id);
+		times++;
+		msleep(5);
+	}
 	*ppos = strlen(buf);
 	kfree(buf);
 	return *ppos;
@@ -323,8 +330,8 @@ static void time_handler(struct timer_list *t)
 { 
 	//int win=0;
 	printk("timer\n");
-    mod_timer(&stimer, jiffies + TIME_INTERVAL*HZ);
-    heat(p_id); /* 1 is win.*/
+    //mod_timer(&stimer, jiffies + TIME_INTERVAL*HZ);
+    //heat(p_id); /* 1 is win.*/
 	 /* we get no page, maybe something wrong occurs.*/
     //printk("sysmon: fail in scanning page table...\n");
 }
@@ -332,7 +339,7 @@ static void time_handler(struct timer_list *t)
 static int __init my_proc_init(void) {
 	entry = proc_create("kpage_heat", 0660, NULL, &my_ops);
 	//init_timer(&stimer);
-    timer_setup(&stimer, time_handler, 0);
+    //timer_setup(&stimer, time_handler, 0);
     //add_timer(&stimer);
 	printk("install kpage_heat\n");
 	return entry?0:-1;
@@ -340,7 +347,7 @@ static int __init my_proc_init(void) {
 
 static void __exit my_proc_exit(void) {
 	proc_remove(entry);
-	del_timer(&stimer);
+	//del_timer(&stimer);
 }
 
 MODULE_LICENSE("GPL");
