@@ -269,7 +269,7 @@ static void heat(int p_id) {
 		last_p_id = -1;
 		return;
 	}
-	while(it<ITERATION_TIMES) {
+	//while(it<ITERATION_TIMES) {
 		//user level thread
 		mm = task->mm;
 		//kernel level thread
@@ -292,9 +292,9 @@ static void heat(int p_id) {
 		count_heat(mm, vma, len, it);
 		max_hot_page_number = max(max_hot_page_number, hot_page_number[it]);
 		up_read(&mm->mmap_sem); 
-		it++;
+		//it++;
 
-	}
+	//}
 	printk("part 3.1.2-------find pages---------\n");
 	printk("total pages = %d\n", (int)mm->total_vm);
 	printk("selected pages = %d\n", max_hot_page_number);
@@ -303,9 +303,9 @@ static void heat(int p_id) {
 	print_heat();
 
 	//print pages
-	for(i=0;i<ITERATION_TIMES;i++) {
+	//for(i=0;i<ITERATION_TIMES;i++) {
 		printk("hot page number: %d\n", hot_page_number[i]);
-	}
+	//}
 }
 
 static ssize_t input_pid(struct file *file, const char __user *ubuf, size_t count, loff_t *ppos) {
