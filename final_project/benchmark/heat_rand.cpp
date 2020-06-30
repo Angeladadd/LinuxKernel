@@ -185,6 +185,7 @@ int main(int argc, char *argv[]){
 		sprintf(cmd, "echo %d > /proc/kpage_heat", int(pid));
 		system(cmd);
   	heat();
+		system(cmd);
 		delete cmd;
 
     return 0;
