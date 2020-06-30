@@ -85,6 +85,8 @@ static void append_heat(unsigned long long vaddr) {
 static void free_heat(void) {
 	if (page_heat_arr)
 		kfree(page_heat_arr);
+	page_heat_arr_capacity = 0;
+	page_heat_arr_size = 0;
 }
 static struct page_heat * find_heat(unsigned long long vaddr) {
 	int i;
@@ -247,10 +249,13 @@ static void heat(int p_id) {
 		printk(KERN_DEBUG "no pid\n");
 		return;
 	}
+
 	if (last_p_id != p_id) {
+		printk("free page heat arr\n");
 		free_heat();
-		last_p_id = p_id;
 	}
+
+	last_p_id = p_id;
 
 	printk(KERN_DEBUG "pid: %d", p_id);
 	task = get_task_struct_from_pid(p_id);
