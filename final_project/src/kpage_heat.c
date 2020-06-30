@@ -42,6 +42,8 @@ static void print_heat(void) {
 		heat_arr[i] = 0;
 	}
 	for (i=0;i<page_heat_arr_size;i++) {
+		max_heat = max(max_heat, page_heat_arr[i].heat);
+		min_heat = min(min_heat, page_heat_arr[i].heat);
 		if (page_heat_arr[i].heat >= HEAT_MAX) {
 			heat_arr[HEAT_MAX]++;
 			continue;
