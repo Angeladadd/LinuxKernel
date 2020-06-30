@@ -18,11 +18,10 @@
 #define HIGH ((int)(ITERATION_TIMES * 0.8))
 #define MIDDLE ((int)(ITERATION_TIMES * 0.4))
 #define LOW 1
-#define max(a, b) ((a)>(b)?(a):(b))
-#define min(a, b) ((a)<(b)?(a):(b))
 
 static struct proc_dir_entry *entry = NULL;
 static int p_id = -1;
+static int last_p_id = -1;
 static int hot_page_number[ITERATION_TIMES];
 static int max_hot_page_number = 0;
 static struct timer_list stimer; 
@@ -35,6 +34,14 @@ struct page_heat {
 static struct page_heat * page_heat_arr = NULL;
 static int page_heat_arr_capacity = 0;
 static int page_heat_arr_size = 0;
+
+static void init_hot_page_number(void) {
+	int i=0;
+	for(;i<ITERATION_TIMES;i++) {
+		hot_page_number[i] = 0;
+	}
+	max_hot_page_number = 0;
+}
 
 static void print_heat(void) {
 	int i;
@@ -187,8 +194,6 @@ static struct vm_area_struct * find_heap_vma(struct mm_struct *mm, int * len, bo
 static void count_heat_core(unsigned long long start, unsigned long long end, struct mm_struct * mm, int it) {
 	unsigned long long addr = start;
 	pte_t * pte, pte_v;
-	// struct page * page;
-	// unsigned long long pfn;//page frame number
 	pgd_t * pgd = NULL;
 	p4d_t * p4d = NULL;
 	pud_t * pud = NULL;
@@ -246,15 +251,23 @@ static void heat(int p_id) {
 	struct mm_struct * mm = NULL;
 	int it = 0, i=0;
 
+	init_hot_page_number();
 	if(p_id == -1) {
 		printk(KERN_DEBUG "no pid\n");
 		return;
 	}
+	if (last_p_id != -1 && last_p_id != p_id) {
+		free_heat();
+	} else if (last_p_id == -1) {
+		last_p_id = p_id;
+	}
+
 	printk(KERN_DEBUG "pid: %d", p_id);
 	task = get_task_struct_from_pid(p_id);
 	if (!task) {
 		printk(KERN_DEBUG "cannot find task from pid\n");
 		p_id = -1;
+		last_p_id = -1;
 		return;
 	}
 	while(it<ITERATION_TIMES) {
@@ -294,7 +307,6 @@ static void heat(int p_id) {
 	for(i=0;i<ITERATION_TIMES;i++) {
 		printk("hot page number: %d\n", hot_page_number[i]);
 	}
-	free_heat();
 }
 
 static ssize_t input_pid(struct file *file, const char __user *ubuf, size_t count, loff_t *ppos) {
@@ -308,11 +320,11 @@ static ssize_t input_pid(struct file *file, const char __user *ubuf, size_t coun
 
 	sscanf(buf, "%d", &p_id);
 	printk("input pid: %d\n", p_id);
-	while(times < TIMES) {
+	// while(times < TIMES) {
 		heat(p_id);
-		times++;
-		msleep(5);
-	}
+	// 	times++;
+	// 	msleep(5);
+	// }
 	*ppos = strlen(buf);
 	kfree(buf);
 	return *ppos;
@@ -330,8 +342,8 @@ static void time_handler(struct timer_list *t)
 { 
 	//int win=0;
 	printk("timer\n");
-    //mod_timer(&stimer, jiffies + TIME_INTERVAL*HZ);
-    //heat(p_id); /* 1 is win.*/
+    mod_timer(&stimer, jiffies + TIME_INTERVAL*HZ);
+    heat(p_id); /* 1 is win.*/
 	 /* we get no page, maybe something wrong occurs.*/
     //printk("sysmon: fail in scanning page table...\n");
 }
@@ -339,7 +351,7 @@ static void time_handler(struct timer_list *t)
 static int __init my_proc_init(void) {
 	entry = proc_create("kpage_heat", 0660, NULL, &my_ops);
 	//init_timer(&stimer);
-    //timer_setup(&stimer, time_handler, 0);
+    timer_setup(&stimer, time_handler, 0);
     //add_timer(&stimer);
 	printk("install kpage_heat\n");
 	return entry?0:-1;
