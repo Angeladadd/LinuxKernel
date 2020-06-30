@@ -12,7 +12,7 @@
 #include <linux/ktime.h> 
 #include <linux/timer.h>
 
-#define TIME_INTERVAL 20
+#define TIME_INTERVAL 1
 #define HEAT_MAX 200
 
 static struct proc_dir_entry *entry = NULL;
