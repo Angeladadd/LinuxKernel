@@ -12,7 +12,6 @@
 #include <linux/ktime.h> 
 #include <linux/timer.h>
 
-#define ITERATION_TIMES 200
 #define TIME_INTERVAL 5
 #define HEAT_MAX 200
 
@@ -261,30 +260,19 @@ static void heat(int p_id) {
 		last_p_id = -1;
 		return;
 	}
-	//while(it<ITERATION_TIMES) {
-		//user level thread
-		mm = task->mm;
-		//kernel level thread
-		if (!mm && !(mm = task->active_mm)) {
-			printk(KERN_DEBUG "cannot find mm\n");
-			return;
-		}
-		//if (it == 0) {
-			//printk(KERN_DEBUG "get mm\n");
+	mm = task->mm;
+	//kernel level thread
+	if (!mm && !(mm = task->active_mm)) {
+		printk(KERN_DEBUG "cannot find mm\n");
+		return;
+	}
 
-		printk("part 3.1.1-------find vmas-------\n");
-			// vma = find_data_vma(mm, &len);
-			// printk("-------data--------\n");
-			// print_vma(mm, vma, len);
-			//printk("-------heap--------\n");
-		//}
-		down_read(&mm->mmap_sem); 
-		vma = find_heap_vma(mm, &len);
-		count_heat(mm, vma, len);
-		up_read(&mm->mmap_sem); 
-		//it++;
+	printk("part 3.1.1-------find vmas-------\n");
+	down_read(&mm->mmap_sem); 
+	vma = find_heap_vma(mm, &len);
+	count_heat(mm, vma, len);
+	up_read(&mm->mmap_sem);
 
-	//}
 	printk("part 3.1.2-------find pages---------\n");
 	printk("total pages = %d\n", (int)mm->total_vm);
 	printk("selected pages = %d\n", hot_page_number);
@@ -292,10 +280,6 @@ static void heat(int p_id) {
 	printk("part 3.1.3-------print time&heat---------\n");
 	print_heat();
 	printk("collecting time:xxx\n");
-	//print pages
-	//for(i=0;i<ITERATION_TIMES;i++) {
-	//	printk("hot page number: %d\n", hot_page_number[i]);
-	//}
 }
 
 static ssize_t input_pid(struct file *file, const char __user *ubuf, size_t count, loff_t *ppos) {
@@ -306,14 +290,9 @@ static ssize_t input_pid(struct file *file, const char __user *ubuf, size_t coun
 	buf = (char*) kzalloc(sizeof(char) * count, GFP_KERNEL);
 	if (copy_from_user(buf, ubuf, count)) 
 		goto eout;
-
 	sscanf(buf, "%d", &p_id);
 	printk("input pid: %d\n", p_id);
-	// while(times < TIMES) {
 	heat(p_id);
-	// 	times++;
-	// 	msleep(5);
-	// }
 	*ppos = strlen(buf);
 	kfree(buf);
 	return *ppos;
@@ -329,17 +308,13 @@ static struct file_operations my_ops = {
 
 static void time_handler(struct timer_list *t)
 { 
-	//int win=0;
 	printk("timer\n");
     mod_timer(&stimer, jiffies + TIME_INTERVAL*HZ);
-    heat(p_id); /* 1 is win.*/
-	 /* we get no page, maybe something wrong occurs.*/
-    //printk("sysmon: fail in scanning page table...\n");
+    heat(p_id); 
 }
 
 static int __init my_proc_init(void) {
 	entry = proc_create("kpage_heat", 0660, NULL, &my_ops);
-	//init_timer(&stimer);
     timer_setup(&stimer, time_handler, 0);
     add_timer(&stimer);
 	printk("install kpage_heat\n");
