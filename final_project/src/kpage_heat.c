@@ -330,7 +330,7 @@ static void time_handler(struct timer_list *t)
 static int __init my_proc_init(void) {
 	entry = proc_create("kpage_heat", 0660, NULL, &my_ops);
 	//init_timer(&stimer);
-    timer_setup(stimer, time_handler, 0);
+    timer_setup(&stimer, time_handler, 0);
     //add_timer(&stimer);
 	return entry?0:-1;
 }
