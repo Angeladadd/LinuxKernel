@@ -8,11 +8,14 @@
 #include <asm/io.h>
 #include <linux/pid.h>
 #include <linux/pid_namespace.h>
-#include <linux/delay.h> 
+#include <linux/delay.h>
+#include <linux/ktime.h> 
+#include <linux/timer.h>
 
 #define ITERATION_TIMES 200
-#define HIGH (int)(ITERATION_TIMES * 0.8)
-#define MIDDLE (int)(ITERATION_TIMES * 0.4)
+#define TIME_INTERVAL 5
+#define HIGH ((int)(ITERATION_TIMES * 0.8))
+#define MIDDLE ((int)(ITERATION_TIMES * 0.4))
 #define LOW 1
 #define max(a, b) ((a)>(b)?(a):(b))
 #define min(a, b) ((a)<(b)?(a):(b))
@@ -21,6 +24,7 @@ static struct proc_dir_entry *entry = NULL;
 static int p_id = -1;
 static int hot_page_number[ITERATION_TIMES];
 static int max_hot_page_number = 0;
+static struct timer_list stimer; 
 
 struct page_heat {
 	unsigned long long v_addr;
@@ -178,14 +182,6 @@ static struct vm_area_struct * find_heap_vma(struct mm_struct *mm, int * len, bo
 
 
 /*******get page heat*******/
-static pte_t * vaddr_to_pte(unsigned long addr, struct mm_struct * mm) {
-	pgd_t * pgd = NULL;
-	p4d_t * p4d = NULL;
-	pud_t * pud = NULL;
-	pmd_t * pmd = NULL;
-	pte_t * pte = NULL;
-
-}
 
 static void count_heat_core(unsigned long long start, unsigned long long end, struct mm_struct * mm, int it) {
 	unsigned long long addr = start;
@@ -249,6 +245,10 @@ static void heat(int p_id) {
 	struct mm_struct * mm = NULL;
 	int it = 0, i=0;
 
+	if(p_id == -1) {
+		printk(KERN_DEBUG "no pid\n");
+		return;
+	}
 	printk(KERN_DEBUG "pid: %d", p_id);
 	task = get_task_struct_from_pid(p_id);
 	if (!task) {
@@ -279,6 +279,7 @@ static void heat(int p_id) {
 		max_hot_page_number = max(max_hot_page_number, hot_page_number[it]);
 		up_read(&mm->mmap_sem); 
 		it++;
+
 	}
 	printk("part 3.1.2-------find pages---------\n");
 	printk("total pages = %d\n", (int)mm->total_vm);
@@ -303,7 +304,7 @@ static ssize_t input_pid(struct file *file, const char __user *ubuf, size_t coun
 		goto eout;
 
 	sscanf(buf, "%d", &p_id);
-	heat(p_id);
+	//heat(p_id);
 	*ppos = strlen(buf);
 	kfree(buf);
 	return *ppos;
@@ -317,13 +318,26 @@ static struct file_operations my_ops = {
 	.write = input_pid,
 };
 
+static void time_handler(unsigned long data)
+{ 
+	//int win=0;
+    mod_timer(&stimer, jiffies + TIME_INTERVAL*HZ);
+    heat(p_id); /* 1 is win.*/
+	 /* we get no page, maybe something wrong occurs.*/
+    //printk("sysmon: fail in scanning page table...\n");
+}
+
 static int __init my_proc_init(void) {
 	entry = proc_create("kpage_heat", 0660, NULL, &my_ops);
+	init_timer(&stimer);
+    setup_timer(stimer, time_handler, 0);
+    add_timer(&stimer);
 	return entry?0:-1;
 }
 
 static void __exit my_proc_exit(void) {
 	proc_remove(entry);
+	del_timer(&stimer);
 }
 
 MODULE_LICENSE("GPL");
