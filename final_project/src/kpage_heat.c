@@ -239,7 +239,9 @@ static void heat(int p_id) {
 	struct task_struct * task = NULL;
 	struct mm_struct * mm = NULL;
 	int i=0;
+	struct timeval start, finish;
 
+	start = ktime_to_timeval(ktime_get());
 	hot_page_number = 0;
 	if(p_id == -1) {
 		printk(KERN_DEBUG "no pid\n");
@@ -277,7 +279,8 @@ static void heat(int p_id) {
 
 	printk("part 3.1.3-------print time&heat---------\n");
 	print_heat();
-	printk("collecting time:xxx\n");
+	finish = ktime_to_timeval(ktime_get());
+	printk("collecting time: %10.6f micro seconds\n", (((finish.tv_sec * 1000000.0) + finish.tv_usec) - ((start.tv_sec * 1000000.0) + start.tv_usec)) / 1.0);
 }
 
 static ssize_t input_pid(struct file *file, const char __user *ubuf, size_t count, loff_t *ppos) {
