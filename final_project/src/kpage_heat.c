@@ -332,6 +332,7 @@ static int __init my_proc_init(void) {
 	//init_timer(&stimer);
     timer_setup(&stimer, time_handler, 0);
     //add_timer(&stimer);
+	printk("install kpage_heat\n");
 	return entry?0:-1;
 }
 
