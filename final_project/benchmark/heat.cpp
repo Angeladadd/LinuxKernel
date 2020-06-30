@@ -38,6 +38,7 @@ double dtdxsq, dtdysq;
 double t;
 
 int leafmaxcol;
+char * cmd;
 
 void swap_ranks(double ***from_ranks, double ***to_ranks) {
   double **tmp_ranks = *from_ranks;
