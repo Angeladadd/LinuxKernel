@@ -162,7 +162,7 @@ static struct vm_area_struct * find_data_vma(struct mm_struct *mm, int * len) {
 	return find_segment_vma(mm, len, start, end);
 }
 
-static struct vm_area_struct * find_heap_vma(struct mm_struct *mm, int * len, bool print) {
+static struct vm_area_struct * find_heap_vma(struct mm_struct *mm, int * len) {
 	unsigned long start, end;
 
 	printk("-------heap--------\n");
