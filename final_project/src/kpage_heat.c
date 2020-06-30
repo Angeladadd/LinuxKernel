@@ -70,7 +70,7 @@ static void print_heat(void) {
 	// printk("ZERO %d\n", zn);
 }
 
-static void append_heat(unsigned long vaddr) {
+static void append_heat(unsigned long long vaddr) {
 	static struct page_heat * tmp = NULL;
 	int i;
 
@@ -96,7 +96,7 @@ static void free_heat(void) {
 	if (page_heat_arr)
 		kfree(page_heat_arr);
 }
-static struct page_heat * find_heat(unsigned long vaddr) {
+static struct page_heat * find_heat(unsigned long long vaddr) {
 	int i;
 	for (i=0;i<page_heat_arr_size;i++) {
 		if (page_heat_arr[i].v_addr == vaddr) 
@@ -104,7 +104,7 @@ static struct page_heat * find_heat(unsigned long vaddr) {
 	}
 	return NULL;
 }
-static void update_heat(unsigned long vaddr) {
+static void update_heat(unsigned long long vaddr) {
 	struct page_heat * heat = find_heat(vaddr);
 	if (heat) {
 		heat->heat++;
@@ -200,7 +200,7 @@ static void count_heat_core(unsigned long long start, unsigned long long end, st
 	pmd_t * pmd = NULL;
 	spinlock_t *ptl;
 
-	printk("updating\n");
+	// printk("updating\n");
 	while (addr <= end) {
 		pgd = pgd_offset(mm, addr);
 		if (pgd_none(*pgd) || pgd_bad(*pgd)) {
@@ -237,7 +237,7 @@ next:
 }
 
 static void count_heat(struct mm_struct * mm, struct vm_area_struct * vma, int len, int it) {
-	printk("counting heat...\n");
+	// printk("counting heat...\n");
 	for (; len>0 && vma; len--, vma = vma->vm_next) {  
 		count_heat_core(vma->vm_start, vma->vm_end, mm, it);
 	}
@@ -256,9 +256,8 @@ static void heat(int p_id) {
 		printk(KERN_DEBUG "no pid\n");
 		return;
 	}
-	if (last_p_id != -1 && last_p_id != p_id) {
+	if (last_p_id != p_id) {
 		free_heat();
-	} else if (last_p_id == -1) {
 		last_p_id = p_id;
 	}
 
@@ -278,7 +277,7 @@ static void heat(int p_id) {
 			printk(KERN_DEBUG "cannot find mm\n");
 			return;
 		}
-		if (i == 0) {
+		if (it == 0) {
 			printk(KERN_DEBUG "get mm\n");
 
 			printk("part 3.1.1-------find vmas-------\n");
@@ -288,7 +287,7 @@ static void heat(int p_id) {
 			printk("-------heap--------\n");
 		}
 		down_read(&mm->mmap_sem); 
-		vma = find_heap_vma(mm, &len, (i==0));
+		vma = find_heap_vma(mm, &len, (it==0));
 
 		count_heat(mm, vma, len, it);
 		max_hot_page_number = max(max_hot_page_number, hot_page_number[it]);
