@@ -262,6 +262,7 @@ static void heat(int p_id) {
 	last_p_id = p_id;
 
 	printk("pid: %d", p_id);
+	printk("last_pid: %d", last_p_id);
 	task = get_task_struct_from_pid(p_id);
 	if (!task) {
 		printk("cannot find task from pid\n");
