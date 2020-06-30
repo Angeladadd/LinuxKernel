@@ -31,15 +31,17 @@ static struct page_heat * page_heat_arr = NULL;
 static int page_heat_arr_capacity = 0;
 static int page_heat_arr_size = 0;
 
+static int heat_arr[HEAT_MAX+1];
+static int size;
+
 static void print_heat(void) {
 	int i;
 	int max_heat = 0, min_heat = __INT_MAX__;
-	int heat_arr[HEAT_MAX+1];
-	int size;
 
 	for (i=0;i<=HEAT_MAX;i++) {
 		heat_arr[i] = 0;
 	}
+
 	for (i=0;i<page_heat_arr_size;i++) {
 		max_heat = max(max_heat, page_heat_arr[i].heat);
 		min_heat = min(min_heat, page_heat_arr[i].heat);
@@ -309,9 +311,44 @@ eout:
 	return -EFAULT;
 }
 
+ssize_t output_result(struct file *file, char __user *ubuf, size_t count, loff_t *ppos) {
+	char * buf = NULL, * tmp_buf = NULL;
+	int len = 0, pos = 0;
+	int i=0, j=0, extend = 80;
+	char * tmp = NULL;
+	if (*ppos > 0)
+		return 0;
+	buf = (char*) kzalloc(sizeof(char) * extend * (HEAT_MAX+1), GFP_KERNEL);
+	tmp_buf = (char*) kzalloc(sizeof(char) * extend * (HEAT_MAX+1), GFP_KERNEL);
+	tmp = (char*) kzalloc(sizeof(char) * extend, GFP_KERNEL);
+	for (i=0;i<=size;i++) {
+		sprintf(tmp, "HEAT %d PAGE %d\n", i, heat_arr[i]);
+		for (j=0;j<strlen(tmp);j++) {
+			tmp_buf[pos] = tmp[j];
+			pos++;
+		}
+	}
+	len += sprintf(buf, "%s\n", tmp_buf);
+	if (copy_to_user(ubuf, buf, len)) {
+		if (buf)
+			kfree(buf);
+		if (tmp)
+			kfree(tmp);
+		if (tmp_buf)
+			kfree(tmp_buf);
+		return -EFAULT;
+	}
+	*ppos = len;
+	kfree(buf);
+	kfree(tmp);
+	kfree(tmp_buf);
+	return *ppos;
+}
+
 static struct file_operations my_ops = {
 	.owner = THIS_MODULE,
 	.write = input_pid,
+	.read = output_result,
 };
 
 static void time_handler(struct timer_list *t)
