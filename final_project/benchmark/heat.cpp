@@ -159,16 +159,15 @@ int main(int argc, char *argv[]){
 
   	dtdxsq = dt / (dx * dx);
   	dtdysq = dt / (dy * dy);
-
+		
+		pid_t pid;
+    pid = getpid();
+    printf("pid %d\n", pid);
+		cmd = new char[80];
+		sprintf(cmd, "echo %d > /proc/kpage_heat", int(pid));
+		system(cmd);
   	heat();
-
-	pid_t pid;
-    	pid = getpid();
-    	printf("pid %d\n", pid);
-	char* cmd = new char[80];
-	sprintf(cmd, "echo %d > /proc/kpage_heat", int(pid));
-	system(cmd);
-	delete cmd;
+		delete cmd;
     
     return 0;
 }
