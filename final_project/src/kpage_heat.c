@@ -12,7 +12,7 @@
 #include <linux/ktime.h> 
 #include <linux/timer.h>
 
-#define TIME_INTERVAL 5
+#define TIME_INTERVAL 20
 #define HEAT_MAX 200
 
 static struct proc_dir_entry *entry = NULL;
@@ -308,7 +308,7 @@ static struct file_operations my_ops = {
 
 static void time_handler(struct timer_list *t)
 { 
-	printk("timer\n");
+	//printk("timer\n");
     mod_timer(&stimer, jiffies + TIME_INTERVAL*HZ);
     heat(p_id); 
 }
