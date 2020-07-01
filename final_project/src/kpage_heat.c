@@ -344,7 +344,7 @@ ssize_t output_result(struct file *file, char __user *ubuf, size_t count, loff_t
 	if (*ppos > 0)
 		return 0;
 	for (i=0;i<=size;i++) {
-		sprintf(&tmp, "HEAT %d PAGE %d\n", i, heat_arr[i]);
+		sprintf(tmp, "HEAT %d PAGE %d\n", i, heat_arr[i]);
 		for (j=0;j<strlen(tmp);j++) {
 			buf[pos] = tmp[j];
 			pos++;
