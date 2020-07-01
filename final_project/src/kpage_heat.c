@@ -192,16 +192,19 @@ static struct count_heat_info {
 	struct mm_struct * mm;
 };
 
-static int count_heat_core(void * info) {
-	unsigned long long addr = info->start;
+static int count_heat_core(void * data) {
+	unsigned long long addr;// = info->start;
 	pte_t * pte, pte_v;
 	pgd_t * pgd = NULL;
 	p4d_t * p4d = NULL;
 	pud_t * pud = NULL;
 	pmd_t * pmd = NULL;
 	spinlock_t *ptl;
+	struct count_heat_info * info = (struct count_heat_info *)data;
 
 	// printk("updating\n");
+	
+	addr = info->start;
 	while (addr < info->end) {
 		pgd = pgd_offset(info->mm, addr);
 		if (pgd_none(*pgd) || pgd_bad(*pgd)) {
@@ -244,7 +247,7 @@ static void count_heat(struct mm_struct * mm, struct vm_area_struct * vma, int l
 	struct count_heat_info info[THREAD_NUM];
 	char thread_name[THREAD_NUM][80];
 	for (i=0;i<THREAD_NUM;i++) {
-		sscanf(&(thread_name[i]), "count heat core %d\0", i);
+		sscanf(thread_name[i], "count heat core %d\0", i);
 	}
 	for (; len>0 && vma; len--, vma = vma->vm_next) {  
 		step = (vma->vm_end - vma->vm_start)/THREAD_NUM;
