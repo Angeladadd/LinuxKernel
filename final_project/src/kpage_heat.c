@@ -8,12 +8,13 @@
 #include <asm/io.h>
 #include <linux/pid.h>
 #include <linux/pid_namespace.h>
-#include <linux/delay.h>
 #include <linux/ktime.h> 
 #include <linux/timer.h>
+#include <linux/kthread.h>
 
 #define TIME_INTERVAL 1
 #define HEAT_MAX 200
+#define THREAD_NUM 8
 
 static struct proc_dir_entry *entry = NULL;
 static int p_id = -1;
@@ -184,8 +185,14 @@ static struct vm_area_struct * find_heap_vma(struct mm_struct *mm, int * len) {
 
 /*******get page heat*******/
 
-static void count_heat_core(unsigned long long start, unsigned long long end, struct mm_struct * mm) {
-	unsigned long long addr = start;
+static struct count_heat_info {
+	unsigned long long start;
+	unsigned long long end;
+	struct mm_struct * mm;
+};
+
+static int count_heat_core(void * info) {
+	unsigned long long addr = info->start;
 	pte_t * pte, pte_v;
 	pgd_t * pgd = NULL;
 	p4d_t * p4d = NULL;
@@ -194,8 +201,8 @@ static void count_heat_core(unsigned long long start, unsigned long long end, st
 	spinlock_t *ptl;
 
 	// printk("updating\n");
-	while (addr <= end) {
-		pgd = pgd_offset(mm, addr);
+	while (addr < info->end) {
+		pgd = pgd_offset(info->mm, addr);
 		if (pgd_none(*pgd) || pgd_bad(*pgd)) {
 			printk("vaddr 0x%lx pgd not present.\n", addr);
 			goto next;
@@ -215,11 +222,11 @@ static void count_heat_core(unsigned long long start, unsigned long long end, st
 			printk("vaddr 0x%lx pmd not present.\n", addr);
 			goto next;
 		}
-		pte = pte_offset_map_lock(mm, pmd, addr, &ptl);
+		pte = pte_offset_map_lock(info->mm, pmd, addr, &ptl);
 		if (pte && pte_present(*pte) && pte_young(*pte)) {
 			pte_v = *pte;
 			pte_v = pte_mkold(pte_v);
-			set_pte_at(mm, addr, pte, pte_v);
+			set_pte_at(info->mm, addr, pte, pte_v);
 			update_heat(addr);
 			hot_page_number++;
 		}
@@ -227,12 +234,25 @@ static void count_heat_core(unsigned long long start, unsigned long long end, st
 next:
 		addr += PAGE_SIZE;
 	}
+	return 0;
 }
 
 static void count_heat(struct mm_struct * mm, struct vm_area_struct * vma, int len) {
 	// printk("counting heat...\n");
+	int step, i;//, start[THREAD_NUM], end[THREAD_NUM];
+	struct count_heat_info info[THREAD_NUM];
+	char thread_name[THREAD_NUM][80];
+	for (i=0;i<THREAD_NUM;i++) {
+		sscanf(&(thread_name[i]), "count heat core %d\0", i);
+	}
 	for (; len>0 && vma; len--, vma = vma->vm_next) {  
-		count_heat_core(vma->vm_start, vma->vm_end, mm);
+		step = (vma->vm_end - vma->vm_start)/THREAD_NUM;
+		for (i=0;i<THREAD_NUM;i++) {
+			info[i].start = (i == 0)?0:info[i-1].end;
+			info[i].end = (i == THREAD_NUM - 1)?vma->vm_end:info[i].start + step;
+			info[i].mm = mm;
+			kthread_run(count_heat_core, &(info[i]), thread_name[i]);
+		}
 	}
 }
 /*************/
