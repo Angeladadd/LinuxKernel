@@ -243,14 +243,15 @@ next:
 
 static void count_heat(struct mm_struct * mm, struct vm_area_struct * vma, int len) {
 	// printk("counting heat...\n");
-	int step, i;//, start[THREAD_NUM], end[THREAD_NUM];
+	int step, i, page_num;//, start[THREAD_NUM], end[THREAD_NUM];
 	struct count_heat_info info[THREAD_NUM];
 	char thread_name[THREAD_NUM][80];
 	for (i=0;i<THREAD_NUM;i++) {
 		sscanf(thread_name[i], "count heat core %d\0", i);
 	}
 	for (; len>0 && vma; len--, vma = vma->vm_next) {  
-		step = (vma->vm_end - vma->vm_start)/THREAD_NUM;
+		page_num = (vma->vm_end - vma->vm_start)/PAGE_SIZE;
+		step = page_num/THREAD_NUM * PAGE_SIZE;
 		for (i=0;i<THREAD_NUM;i++) {
 			info[i].start = (i == 0)?0:info[i-1].end;
 			info[i].end = (i == THREAD_NUM - 1)?vma->vm_end:info[i].start + step;
