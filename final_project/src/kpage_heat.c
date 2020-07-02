@@ -13,7 +13,7 @@
 #include <linux/kthread.h>
 #include <linux/jiffies.h>
 
-#define TIME_INTERVAL 40000
+#define TIME_INTERVAL 100000
 #define HEAT_MAX 200
 #define THREAD_NUM 8
 #define LINE_LEN 80
@@ -343,24 +343,55 @@ eout:
 }
 
 ssize_t output_result(struct file *file, char __user *ubuf, size_t count, loff_t *ppos) {
-	char buf[LINE_LEN * (HEAT_MAX+1)];
-	int pos = 0;
-	int i=0, j=0;
-	char tmp[LINE_LEN];
+	// char buf[LINE_LEN * (HEAT_MAX+1)];
+	// int pos = 0;
+	// int i=0, j=0;
+	// char tmp[LINE_LEN];
+	// if (*ppos > 0)
+	// 	return 0;
+	// for (i=0;i<=size;i++) {
+	// 	sprintf(tmp, "HEAT %d PAGE %d\n", i, heat_arr[i]);
+	// 	for (j=0;j<strlen(tmp);j++) {
+	// 		buf[pos] = tmp[j];
+	// 		pos++;
+	// 	}
+	// }
+	// buf[pos] = '\0';
+	// if (copy_to_user(ubuf, &buf, pos+1)) {
+	// 	return -EFAULT;
+	// }
+	// *ppos = pos+1;
+	// return *ppos;
+	char * buf = NULL, * tmp_buf = NULL;
+	int len = 0, pos = 0;
+	int i=0, j=0, extend = 80;
+	char * tmp = NULL;
 	if (*ppos > 0)
 		return 0;
+	buf = (char*) kzalloc(sizeof(char) * extend * (HEAT_MAX+1), GFP_KERNEL);
+	tmp_buf = (char*) kzalloc(sizeof(char) * extend * (HEAT_MAX+1), GFP_KERNEL);
+	tmp = (char*) kzalloc(sizeof(char) * extend, GFP_KERNEL);
 	for (i=0;i<=size;i++) {
 		sprintf(tmp, "HEAT %d PAGE %d\n", i, heat_arr[i]);
 		for (j=0;j<strlen(tmp);j++) {
-			buf[pos] = tmp[j];
+			tmp_buf[pos] = tmp[j];
 			pos++;
 		}
 	}
-	buf[pos] = '\0';
-	if (copy_to_user(ubuf, &buf, pos+1)) {
+	len += sprintf(buf, "%s\n", tmp_buf);
+	if (copy_to_user(ubuf, buf, len)) {
+		if (buf)
+			kfree(buf);
+		if (tmp)
+			kfree(tmp);
+		if (tmp_buf)
+			kfree(tmp_buf);
 		return -EFAULT;
 	}
-	*ppos = pos+1;
+	*ppos = len;
+	kfree(buf);
+	kfree(tmp);
+	kfree(tmp_buf);
 	return *ppos;
 }
 
