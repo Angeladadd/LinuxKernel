@@ -11,8 +11,9 @@
 #include <linux/ktime.h> 
 #include <linux/timer.h>
 #include <linux/kthread.h>
+#include <linux/jiffies.h>
 
-#define TIME_INTERVAL 1
+#define TIME_INTERVAL 2000000
 #define HEAT_MAX 200
 #define THREAD_NUM 8
 #define LINE_LEN 80
@@ -244,20 +245,24 @@ next:
 static void count_heat(struct mm_struct * mm, struct vm_area_struct * vma, int len) {
 	printk("counting heat...\n");
 	int step, i, page_num;//, start[THREAD_NUM], end[THREAD_NUM];
-	struct count_heat_info info[THREAD_NUM];
+	struct count_heat_info info[THREAD_NUM], info_seq;
 	char thread_name[THREAD_NUM][80];
 	for (i=0;i<THREAD_NUM;i++) {
 		sscanf(thread_name[i], "count heat core %d\0", i);
 	}
 	for (; len>0 && vma; len--, vma = vma->vm_next) {  
-		page_num = (vma->vm_end - vma->vm_start)/PAGE_SIZE;
-		step = page_num/THREAD_NUM * PAGE_SIZE;
-		for (i=0;i<THREAD_NUM;i++) {
-			info[i].start = (i == 0)?0:info[i-1].end;
-			info[i].end = (i == THREAD_NUM - 1)?vma->vm_end:info[i].start + step;
-			info[i].mm = mm;
-			kthread_run(count_heat_core, &(info[i]), thread_name[i]);
-		}
+		info_seq.start = vma->vm_start;
+		info_seq.end = vma->vm_end;
+		info_seq.mm = mm;
+		count_heat_core(&info_seq);
+		// page_num = (vma->vm_end - vma->vm_start)/PAGE_SIZE;
+		// step = page_num/THREAD_NUM * PAGE_SIZE;
+		// for (i=0;i<THREAD_NUM;i++) {
+		// 	info[i].start = (i == 0)?0:info[i-1].end;
+		// 	info[i].end = (i == THREAD_NUM - 1)?vma->vm_end:info[i].start + step;
+		// 	info[i].mm = mm;
+		// 	kthread_run(count_heat_core, &(info[i]), thread_name[i]);
+		// }
 	}
 }
 /*************/
@@ -368,7 +373,7 @@ static struct file_operations my_ops = {
 static void time_handler(struct timer_list *t)
 { 
 	//printk("timer\n");
-    mod_timer(&stimer, jiffies + TIME_INTERVAL*HZ);
+    mod_timer(&stimer, jiffies + usecs_to_jiffies(TIME_INTERVAL));
     heat(); 
 }
 
