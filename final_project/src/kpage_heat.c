@@ -202,7 +202,7 @@ static int count_heat_core(void * data) {
 	spinlock_t *ptl;
 	struct count_heat_info * info = (struct count_heat_info *)data;
 
-	// printk("updating\n");
+	printk("updating\n");
 	
 	addr = info->start;
 	while (addr < info->end) {
@@ -242,7 +242,7 @@ next:
 }
 
 static void count_heat(struct mm_struct * mm, struct vm_area_struct * vma, int len) {
-	// printk("counting heat...\n");
+	printk("counting heat...\n");
 	int step, i, page_num;//, start[THREAD_NUM], end[THREAD_NUM];
 	struct count_heat_info info[THREAD_NUM];
 	char thread_name[THREAD_NUM][80];
@@ -284,23 +284,24 @@ static void heat(void) {
 
 	last_p_id = p_id;
 
-	//printk("pid: %d", p_id);
+	printk("pid: %d", p_id);
 	//printk("last_pid: %d", last_p_id);
 	task = get_task_struct_from_pid(p_id);
 	if (!task) {
 		printk("cannot find task from pid\n");
 		p_id = -1;
 		last_p_id = -1;
-		printk("pid %d", p_id);
+		//printk("pid %d", p_id);
 		return;
 	}
+	printk("get task\n");
 	mm = task->mm;
 	//kernel level thread
 	if (!mm && !(mm = task->active_mm)) {
 		printk("cannot find mm\n");
 		return;
 	}
-
+	printk("get mm\n");
 	printk("part 3.1.1-------find vmas-------\n");
 	down_read(&mm->mmap_sem); 
 	vma = find_heap_vma(mm, &len);
