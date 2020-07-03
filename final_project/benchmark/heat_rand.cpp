@@ -183,11 +183,13 @@ int main(int argc, char *argv[]){
     printf("pid %d\n", pid);
 		cmd = new char[80];
 		sprintf(cmd, "echo %d > /proc/kpage_heat", int(pid));
-		system(cmd);
+		if(system(cmd))
+			return 0;
   	heat();
 		sleep(1);
 		sprintf(cmd, "cat /proc/kpage_heat");
-		system(cmd);
+		if(system(cmd))
+			return 0;
 		delete cmd;
 
     return 0;
