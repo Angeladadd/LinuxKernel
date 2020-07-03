@@ -126,18 +126,15 @@ out:
 
 /*****find data/heap vma*****/
 static void print_vma(struct mm_struct * mm, struct vm_area_struct * vma, int len) {
-	// down_read(&mm->mmap_sem); 
 	for (; len>0 && vma; len--, vma = vma->vm_next) {  
 		printk("VMA 0x%lx-0x%lx", vma->vm_start, vma->vm_end);  
 		printk("\n");  
 	}
-	// up_read(&mm->mmap_sem); 
 }
 
 static struct vm_area_struct * find_segment_vma(struct mm_struct *mm, int * len, unsigned long start, unsigned long end) {
 	struct vm_area_struct *head = NULL, *vma = NULL;
 	
-	// down_read(&mm->mmap_sem); 
 	for (vma = mm->mmap; vma && vma->vm_start < start; vma = vma->vm_next) { }
 	if (vma && vma->vm_end <= end) {
 		head = vma;
@@ -147,25 +144,11 @@ static struct vm_area_struct * find_segment_vma(struct mm_struct *mm, int * len,
 	}
 	for (;vma && vma->vm_end <= end; vma = vma->vm_next) {
 		(*len)++;
-	}
-	// up_read(&mm->mmap_sem); 
+	} 
 
 	print_vma(mm, head, *len);
 
 	return head;
-}
-
-static struct vm_area_struct * find_data_vma(struct mm_struct *mm, int * len) {
-	unsigned long start, end;
-
-	*len = 0;
-	spin_lock(&mm->arg_lock);
-	start = mm->start_data;
-	end = mm->end_data;
-	printk("data start 0x%lx, end 0x%lx", start, end);
-	spin_unlock(&mm->arg_lock);
-
-	return find_segment_vma(mm, len, start, end);
 }
 
 static struct vm_area_struct * find_heap_vma(struct mm_struct *mm, int * len) {
@@ -176,7 +159,6 @@ static struct vm_area_struct * find_heap_vma(struct mm_struct *mm, int * len) {
 	spin_lock(&mm->arg_lock);
 	start = mm->start_brk;
 	end = mm->brk;
-	//if (print)
 	printk("brk start 0x%lx, end 0x%lx", start, end);
 	spin_unlock(&mm->arg_lock);
 
@@ -255,14 +237,6 @@ static void count_heat(struct mm_struct * mm, struct vm_area_struct * vma, int l
 		info_seq.end = vma->vm_end;
 		info_seq.mm = mm;
 		count_heat_core(&info_seq);
-		// page_num = (vma->vm_end - vma->vm_start)/PAGE_SIZE;
-		// step = page_num/THREAD_NUM * PAGE_SIZE;
-		// for (i=0;i<THREAD_NUM;i++) {
-		// 	info[i].start = (i == 0)?0:info[i-1].end;
-		// 	info[i].end = (i == THREAD_NUM - 1)?vma->vm_end:info[i].start + step;
-		// 	info[i].mm = mm;
-		// 	kthread_run(count_heat_core, &(info[i]), thread_name[i]);
-		// }
 	}
 }
 /*************/
@@ -290,13 +264,11 @@ static void heat(void) {
 	last_p_id = p_id;
 
 	printk("pid: %d", p_id);
-	//printk("last_pid: %d", last_p_id);
 	task = get_task_struct_from_pid(p_id);
 	if (!task) {
 		printk("cannot find task from pid\n");
 		p_id = -1;
 		last_p_id = -1;
-		//printk("pid %d", p_id);
 		return;
 	}
 	printk("get task\n");
@@ -333,7 +305,6 @@ static ssize_t input_pid(struct file *file, const char __user *ubuf, size_t coun
 		goto eout;
 	sscanf(buf, "%d", &p_id);
 	printk("input pid: %d\n", p_id);
-	//heat(p_id);
 	*ppos = strlen(buf);
 	kfree(buf);
 	return *ppos;
@@ -343,25 +314,6 @@ eout:
 }
 
 ssize_t output_result(struct file *file, char __user *ubuf, size_t count, loff_t *ppos) {
-	// char buf[LINE_LEN * (HEAT_MAX+1)];
-	// int pos = 0;
-	// int i=0, j=0;
-	// char tmp[LINE_LEN];
-	// if (*ppos > 0)
-	// 	return 0;
-	// for (i=0;i<=size;i++) {
-	// 	sprintf(tmp, "HEAT %d PAGE %d\n", i, heat_arr[i]);
-	// 	for (j=0;j<strlen(tmp);j++) {
-	// 		buf[pos] = tmp[j];
-	// 		pos++;
-	// 	}
-	// }
-	// buf[pos] = '\0';
-	// if (copy_to_user(ubuf, &buf, pos+1)) {
-	// 	return -EFAULT;
-	// }
-	// *ppos = pos+1;
-	// return *ppos;
 	char * buf = NULL, * tmp_buf = NULL;
 	int len = 0, pos = 0;
 	int i=0, j=0, extend = 80;
@@ -403,7 +355,6 @@ static struct file_operations my_ops = {
 
 static void time_handler(struct timer_list *t)
 { 
-	//printk("timer\n");
     mod_timer(&stimer, jiffies + usecs_to_jiffies(TIME_INTERVAL));
     heat(); 
 }
