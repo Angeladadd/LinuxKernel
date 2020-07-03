@@ -30,6 +30,12 @@ struct page_heat {
 	int heat;
 };
 
+struct count_heat_info {
+	unsigned long long start;
+	unsigned long long end;
+	struct mm_struct * mm;
+};
+
 static struct page_heat * page_heat_arr = NULL;
 static int page_heat_arr_capacity = 0;
 static int page_heat_arr_size = 0;
@@ -168,6 +174,7 @@ static struct vm_area_struct * find_heap_vma(struct mm_struct *mm, int * len) {
 
 
 /*******get page heat*******/
+
 static int count_heat_core(void * data) {
 	unsigned long long addr;// = info->start;
 	pte_t * pte, pte_v;
