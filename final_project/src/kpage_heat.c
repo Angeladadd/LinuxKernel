@@ -168,13 +168,6 @@ static struct vm_area_struct * find_heap_vma(struct mm_struct *mm, int * len) {
 
 
 /*******get page heat*******/
-
-static struct count_heat_info {
-	unsigned long long start;
-	unsigned long long end;
-	struct mm_struct * mm;
-};
-
 static int count_heat_core(void * data) {
 	unsigned long long addr;// = info->start;
 	pte_t * pte, pte_v;
@@ -225,8 +218,8 @@ next:
 }
 
 static void count_heat(struct mm_struct * mm, struct vm_area_struct * vma, int len) {
-	printk("counting heat...\n");
 	struct count_heat_info info_seq;
+	printk("counting heat...\n");
 	for (; len>0 && vma; len--, vma = vma->vm_next) {  
 		info_seq.start = vma->vm_start;
 		info_seq.end = vma->vm_end;
