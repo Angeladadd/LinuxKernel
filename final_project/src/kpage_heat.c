@@ -191,22 +191,22 @@ static int count_heat_core(void * data) {
 	while (addr < info->end) {
 		pgd = pgd_offset(info->mm, addr);
 		if (pgd_none(*pgd) || pgd_bad(*pgd)) {
-			printk("vaddr 0x%lx pgd not present.\n", addr);
+			printk("vaddr 0x%llx pgd not present.\n", addr);
 			goto next;
 		}
 		p4d = p4d_offset(pgd, addr);
         if (p4d_none(*p4d) || p4d_bad(*p4d)) {
-			printk("vaddr 0x%lx p4d not present.\n", addr);
+			printk("vaddr 0x%llx p4d not present.\n", addr);
 			goto next;
 		}
 		pud = pud_offset(p4d, addr);
         if (pud_none(*pud) || pud_bad(*pud)) {
-			printk("vaddr 0x%lx pud not present.\n", addr);
+			printk("vaddr 0x%llx pud not present.\n", addr);
 			goto next;
 		}	
 		pmd = pmd_offset(pud, addr);
         if (pmd_none(*pmd) || pmd_bad(*pmd)) {
-			printk("vaddr 0x%lx pmd not present.\n", addr);
+			printk("vaddr 0x%llx pmd not present.\n", addr);
 			goto next;
 		}
 		pte = pte_offset_map_lock(info->mm, pmd, addr, &ptl);
@@ -226,12 +226,7 @@ next:
 
 static void count_heat(struct mm_struct * mm, struct vm_area_struct * vma, int len) {
 	printk("counting heat...\n");
-	int step, i, page_num;//, start[THREAD_NUM], end[THREAD_NUM];
-	struct count_heat_info info[THREAD_NUM], info_seq;
-	char thread_name[THREAD_NUM][80];
-	for (i=0;i<THREAD_NUM;i++) {
-		sscanf(thread_name[i], "count heat core %d\0", i);
-	}
+	struct count_heat_info info_seq;
 	for (; len>0 && vma; len--, vma = vma->vm_next) {  
 		info_seq.start = vma->vm_start;
 		info_seq.end = vma->vm_end;
@@ -246,7 +241,6 @@ static void heat(void) {
 	int len;
 	struct task_struct * task = NULL;
 	struct mm_struct * mm = NULL;
-	int i=0;
 	struct timeval start, finish;
 
 	start = ktime_to_timeval(ktime_get());
@@ -292,12 +286,11 @@ static void heat(void) {
 	printk("part 3.1.3-------print time&heat---------\n");
 	print_heat();
 	finish = ktime_to_timeval(ktime_get());
-	printk("collecting time: %lld micro seconds\n", ((finish.tv_sec * 1000000) + finish.tv_usec) - ((start.tv_sec * 1000000) + start.tv_usec));
+	printk("collecting time: %ld micro seconds\n", ((finish.tv_sec * 1000000) + finish.tv_usec) - ((start.tv_sec * 1000000) + start.tv_usec));
 }
 
 static ssize_t input_pid(struct file *file, const char __user *ubuf, size_t count, loff_t *ppos) {
 	char *buf = NULL;
-	int times = 0;
 	if (*ppos > 0) 
 		goto eout;
 	buf = (char*) kzalloc(sizeof(char) * count, GFP_KERNEL);
