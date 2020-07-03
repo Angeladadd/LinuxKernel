@@ -13,7 +13,7 @@
 #include <linux/kthread.h>
 #include <linux/jiffies.h>
 
-#define TIME_INTERVAL 100000
+#define TIME_INTERVAL 50000
 #define HEAT_MAX 200
 #define THREAD_NUM 8
 #define LINE_LEN 80
