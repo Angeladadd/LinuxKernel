@@ -281,7 +281,8 @@ static void heat(void) {
 
 	printk("part 3.1.2-------find pages---------\n");
 	printk("total pages = %d\n", (int)mm->total_vm);
-	printk("selected pages = %d\n", hot_page_number);
+	printk("hot pages in this round = %d\n", hot_page_number);
+	printk("selected pages: %d\n", page_heat_arr_size);
 
 	printk("part 3.1.3-------print time&heat---------\n");
 	print_heat();
