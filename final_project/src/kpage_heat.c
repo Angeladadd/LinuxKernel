@@ -129,8 +129,6 @@ out:
 	return task;
 }
 
-
-/*****find data/heap vma*****/
 static void print_vma(struct mm_struct * mm, struct vm_area_struct * vma, int len) {
 	for (; len>0 && vma; len--, vma = vma->vm_next) {  
 		printk("VMA 0x%lx-0x%lx", vma->vm_start, vma->vm_end);  
@@ -170,13 +168,9 @@ static struct vm_area_struct * find_heap_vma(struct mm_struct *mm, int * len) {
 
 	return find_segment_vma(mm, len, start, end);
 }
-/**********/
-
-
-/*******get page heat*******/
 
 static int count_heat_core(void * data) {
-	unsigned long long addr;// = info->start;
+	unsigned long long addr;
 	pte_t * pte, pte_v;
 	pgd_t * pgd = NULL;
 	p4d_t * p4d = NULL;
@@ -234,7 +228,6 @@ static void count_heat(struct mm_struct * mm, struct vm_area_struct * vma, int l
 		count_heat_core(&info_seq);
 	}
 }
-/*************/
 
 static void heat(void) {
 	struct vm_area_struct *vma;
