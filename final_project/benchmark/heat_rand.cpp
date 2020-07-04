@@ -63,8 +63,6 @@ int heat() {
 			printf("before address start: %p\n", (before+i));
 			printf("after address start: %p\n", (after+i));
   	}
-		if(system(cmd))
-			return 0;
   	cout << "FINISH ALLOCTION *************************" << endl;
   	#pragma omp parallel for schedule(static, 64) 
   	for (int i = 0; i < nx; ++i) 
@@ -186,6 +184,8 @@ int main(int argc, char *argv[]){
     printf("pid %d\n", pid);
 		cmd = new char[80];
 		sprintf(cmd, "echo %d > /proc/kpage_heat", int(pid));
+		if(system(cmd))
+			return 0;
   	heat();
 		sleep(1);
 		sprintf(cmd, "cat /proc/kpage_heat");

@@ -63,8 +63,6 @@ int heat() {
 			printf("before address start: %p\n", (before+i));
 			printf("after address start: %p\n", (after+i));
   	}
-		if(system(cmd))
-			return 0;
   	cout << "FINISH ALLOCTION *************************" << endl;
 
   	#pragma omp parallel for schedule(static, 8) 
